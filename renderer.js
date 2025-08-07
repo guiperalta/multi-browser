@@ -1,0 +1,930 @@
+const { ipcRenderer } = require('electron');
+
+class MultiBrowserUI {
+    constructor() {
+        this.activeTabs = new Map(); // sessionId -> tab element
+        this.activeTabId = 'welcome';
+        this.sessions = new Map(); // sessionId -> session data
+        this.modalOpen = false;
+        this.previousActiveTab = null;
+        this.contextMenuOpen = false;
+        this.contextMenuTarget = null;
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.loadSessions();
+        
+        // Test if webview is supported
+        console.log('Webview support:', typeof document.createElement('webview'));
+        
+        // Log any errors
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+        });
+        
+        // Add global test function
+        window.testModal = () => {
+            console.log('🧪 Testing modal manually');
+            this.showCreateSessionModal();
+        };
+
+        // Listen for page title updates from main process
+        ipcRenderer.on('page-title-updated', (event, { sessionId, title }) => {
+            this.updateTabTitle(sessionId, title);
+        });
+
+        // Listen for favicon updates from main process
+        ipcRenderer.on('page-favicon-updated', (event, { sessionId, favicon }) => {
+            this.updateTabFavicon(sessionId, favicon);
+        });
+
+        // Listen for external link notifications
+        ipcRenderer.on('external-link-opened', (event, { url }) => {
+            const domain = new URL(url).hostname;
+            this.showNotification(`Link opened in system browser: ${domain}`, 'info');
+        });
+        
+        // Add debug listeners to form inputs
+        setTimeout(() => {
+            const nameInput = document.getElementById('sessionName');
+            const urlInput = document.getElementById('sessionUrl');
+            
+            if (nameInput) {
+                nameInput.addEventListener('click', () => console.log('🔧 Name input clicked!'));
+                nameInput.addEventListener('focus', () => console.log('🔧 Name input focused!'));
+                nameInput.addEventListener('input', () => console.log('🔧 Name input changed!'));
+            }
+            
+            if (urlInput) {
+                urlInput.addEventListener('click', () => console.log('🔧 URL input clicked!'));
+                urlInput.addEventListener('focus', () => console.log('🔧 URL input focused!'));
+                urlInput.addEventListener('input', () => console.log('🔧 URL input changed!'));
+            }
+        }, 1000);
+    }
+
+    setupEventListeners() {
+        // Modal controls
+        const newSessionBtn = document.getElementById('newSessionBtn');
+        const newTabBtn = document.getElementById('newTabBtn');
+        const createFirstSession = document.getElementById('createFirstSession');
+        const closeModal = document.getElementById('closeModal');
+        const cancelSession = document.getElementById('cancelSession');
+        const sessionModal = document.getElementById('sessionModal');
+        
+        newSessionBtn.addEventListener('click', async () => {
+            console.log('🔧 New Session button clicked (sidebar)');
+            await this.showCreateSessionModal();
+        });
+        newTabBtn.addEventListener('click', async () => {
+            console.log('🔧 New Tab button clicked (tab bar)');
+            await this.showCreateSessionModal();
+        });
+        createFirstSession.addEventListener('click', async () => {
+            console.log('🔧 Create First Session button clicked (welcome)');
+            await this.showCreateSessionModal();
+        });
+        closeModal.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔧 Close modal button clicked');
+            await this.hideCreateSessionModal();
+        });
+        cancelSession.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔧 Cancel button clicked');
+            await this.hideCreateSessionModal();
+        });
+        
+        // Welcome tab click handler
+        const welcomeTab = document.querySelector('.welcome-tab');
+        if (welcomeTab) {
+            welcomeTab.addEventListener('click', () => {
+                this.switchToTab('welcome');
+            });
+        }
+        
+        // Close modal when clicking outside
+        sessionModal.addEventListener('click', async (e) => {
+            if (e.target === sessionModal) {
+                await this.hideCreateSessionModal();
+            }
+        });
+
+        // Form submission
+        const form = document.getElementById('createSessionForm');
+        form.addEventListener('submit', (e) => this.handleCreateSession(e));
+
+        // ESC key to close modal
+        document.addEventListener('keydown', async (e) => {
+            if (e.key === 'Escape' && sessionModal.classList.contains('show')) {
+                await this.hideCreateSessionModal();
+            } else if (e.key === 'Escape' && this.contextMenuOpen) {
+                await this.hideContextMenu();
+            }
+        });
+
+        // Setup context menu
+        this.setupContextMenu();
+
+        // Setup rename modal
+        this.setupRenameModal();
+    }
+
+    async showCreateSessionModal() {
+        console.log('🔧 Attempting to show create session modal');
+        const modal = document.getElementById('sessionModal');
+        if (!modal) {
+            console.error('❌ Modal element not found!');
+            return;
+        }
+        
+        // Store current active tab and hide browser view
+        this.previousActiveTab = this.activeTabId;
+        this.modalOpen = true;
+        
+        console.log(`🔧 Current active tab: ${this.activeTabId}, storing as previous: ${this.previousActiveTab}`);
+        
+        // Hide any active browser view to prevent it from covering the modal
+        if (this.activeTabId && this.activeTabId !== 'welcome') {
+            console.log('🔧 Hiding browser view before showing modal');
+            try {
+                await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+            } catch (error) {
+                console.log('Error hiding browser view:', error);
+            }
+        } else {
+            console.log('🔧 No browser view to hide (on welcome tab)');
+        }
+        
+        console.log('✅ Modal element found, adding show class');
+        modal.classList.add('show');
+        
+        // Force the modal to be on top with extreme z-index
+        modal.style.zIndex = '999999999';
+        modal.style.display = 'flex';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100vw';
+        modal.style.height = '100vh';
+        
+        // Force all form inputs to be accessible
+        const nameInput = document.getElementById('sessionName');
+        const urlInput = document.getElementById('sessionUrl');
+        const allInputs = [nameInput, urlInput].filter(Boolean);
+        
+        allInputs.forEach(input => {
+            // Force maximum z-index and ensure accessibility
+            input.style.cssText = `
+                z-index: 2147483647 !important;
+                pointer-events: all !important;
+                position: relative !important;
+                background: white !important;
+                border: 2px solid #e1e5e9 !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+            `;
+            input.disabled = false;
+            input.readOnly = false;
+            input.tabIndex = 0;
+        });
+        
+        if (nameInput) {
+            setTimeout(() => {
+                nameInput.focus();
+                nameInput.select();
+                console.log('🔧 Input field focused and selected');
+                console.log('🔧 Input computed style:', window.getComputedStyle(nameInput).pointerEvents);
+                console.log('🔧 Input z-index:', window.getComputedStyle(nameInput).zIndex);
+            }, 200);
+        }
+        
+        console.log('✅ Modal should now be visible with maximum z-index');
+    }
+
+    async hideCreateSessionModal() {
+        console.log('🔧 Hiding modal and restoring UI');
+        const modal = document.getElementById('sessionModal');
+        
+        // Remove the show class and reset styles
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        modal.style.zIndex = '';
+        
+        document.getElementById('createSessionForm').reset();
+        
+        this.modalOpen = false;
+        
+        // Restore the browser view if we had one active
+        console.log(`🔧 Previous active tab was: ${this.previousActiveTab}`);
+        if (this.previousActiveTab && this.previousActiveTab !== 'welcome') {
+            console.log('🔧 Restoring browser view after hiding modal');
+            try {
+                await ipcRenderer.invoke('show-browser-view', this.previousActiveTab);
+                console.log('✅ Browser view restored successfully');
+            } catch (error) {
+                console.log('Error restoring browser view:', error);
+            }
+        } else {
+            console.log('🔧 No browser view to restore (was on welcome tab)');
+        }
+        
+        this.previousActiveTab = null;
+        console.log('✅ Modal hidden and UI restored');
+    }
+
+    async handleCreateSession(e) {
+        e.preventDefault();
+        
+        const name = document.getElementById('sessionName').value.trim();
+        let url = document.getElementById('sessionUrl').value.trim();
+
+        if (!name) {
+            this.showNotification('Please enter a session name', 'error');
+            return;
+        }
+
+        // Validate and fix URL
+        if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+        }
+        if (!url) {
+            url = 'https://www.google.com';
+        }
+
+        try {
+            const result = await ipcRenderer.invoke('create-browser-session', {
+                name,
+                url: url
+            });
+
+            if (result.success) {
+                // Hide modal first
+                await this.hideCreateSessionModal();
+                
+                // Show success notification
+                this.showNotification(`Session "${name}" created successfully!`, 'success');
+                
+                // Refresh sessions list
+                await this.loadSessions();
+                
+                // Open the new session tab
+                setTimeout(async () => {
+                    await this.openSessionTab(result.sessionData);
+                }, 200);
+            } else {
+                this.showNotification(`Error: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showNotification(`Error creating session: ${error.message}`, 'error');
+        }
+    }
+
+    async loadSessions() {
+        const container = document.getElementById('sessionsContainer');
+        container.innerHTML = '<div class="loading">Loading sessions...</div>';
+
+        try {
+            const sessions = await ipcRenderer.invoke('get-sessions');
+            this.renderSessions(sessions);
+        } catch (error) {
+            container.innerHTML = '<div class="error">Error loading sessions</div>';
+        }
+    }
+
+    renderSessions(sessions) {
+        const container = document.getElementById('sessionsContainer');
+        
+        if (sessions.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No sessions yet</h3>
+                    <p>Create your first browser session to get started!</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Store sessions for easy access
+        this.sessions.clear();
+        sessions.forEach(session => {
+            this.sessions.set(session.id, session);
+        });
+
+        // Sort sessions by last accessed (most recent first)
+        sessions.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
+
+        container.innerHTML = sessions.map(session => `
+            <div class="session-item" data-session-id="${session.id}" onclick="ui.openSessionTab('${session.id}')">
+                <h3>${this.escapeHtml(session.name)}</h3>
+                <div class="session-url">${this.escapeHtml(session.url)}</div>
+                <div class="session-meta">
+                    Last accessed: ${this.formatDate(session.lastAccessed)}
+                </div>
+                <div class="session-actions" onclick="event.stopPropagation()">
+                    <button class="btn btn-danger btn-small" onclick="ui.deleteSession('${session.id}')">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async openSessionTab(sessionIdOrData) {
+        let sessionData;
+        
+        if (typeof sessionIdOrData === 'string') {
+            // It's a session ID
+            sessionData = this.sessions.get(sessionIdOrData);
+            if (!sessionData) {
+                this.showNotification('Session not found', 'error');
+                return;
+            }
+        } else {
+            // It's session data object
+            sessionData = sessionIdOrData;
+        }
+
+        // Check if tab is already open
+        if (this.activeTabs.has(sessionData.id)) {
+            this.switchToTab(sessionData.id);
+            return;
+        }
+
+        try {
+            // Create tab
+            this.createTab(sessionData);
+            
+            // Create browser view
+            await this.createBrowserViewTab(sessionData);
+            
+            // Switch to the new tab
+            this.switchToTab(sessionData.id);
+            
+            this.showNotification(`Opened session: ${sessionData.name}`, 'success');
+        } catch (error) {
+            this.showNotification(`Error opening session: ${error.message}`, 'error');
+        }
+    }
+
+    createTab(sessionData) {
+        const tabsContainer = document.getElementById('tabsContainer');
+        
+        const tab = document.createElement('div');
+        tab.className = 'tab';
+        tab.dataset.tabId = sessionData.id;
+        tab.innerHTML = `
+            <span class="tab-title">${this.escapeHtml(sessionData.name)}</span>
+            <button class="tab-close" onclick="ui.closeTab('${sessionData.id}')" title="Close tab">×</button>
+        `;
+        
+        tab.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('tab-close')) {
+                this.switchToTab(sessionData.id);
+            }
+        });
+
+        // Add right-click context menu (but not for welcome tab)
+        tab.addEventListener('contextmenu', async (e) => {
+            await this.showContextMenu(e, sessionData.id);
+        });
+        
+        tabsContainer.appendChild(tab);
+        this.activeTabs.set(sessionData.id, tab);
+    }
+
+    async createBrowserViewTab(sessionData) {
+        const contentArea = document.querySelector('.content-area');
+        
+        const tabContent = document.createElement('div');
+        tabContent.className = 'tab-content';
+        tabContent.id = `tab-${sessionData.id}`;
+        
+        // Create a placeholder div for the browser view
+        const browserContainer = document.createElement('div');
+        browserContainer.className = 'browser-container';
+        browserContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #f5f5f5;">
+                <div style="font-size: 24px; margin-bottom: 10px;">🌐</div>
+                <div>Loading ${sessionData.name}...</div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">${sessionData.url}</div>
+            </div>
+        `;
+        
+        tabContent.appendChild(browserContainer);
+        contentArea.appendChild(tabContent);
+        
+        console.log('Creating browser view for:', sessionData.name, 'URL:', sessionData.url);
+        
+        // Create the browser view in the main process
+        const result = await ipcRenderer.invoke('create-browser-view', sessionData.id);
+        
+        if (result.success) {
+            console.log(`✅ Browser view created for session: ${sessionData.name}`);
+        } else {
+            console.error(`❌ Failed to create browser view:`, result.error);
+            browserContainer.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #f5f5f5;">
+                    <div style="font-size: 24px; margin-bottom: 10px;">⚠️</div>
+                    <div>Failed to load ${sessionData.name}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">Error: ${result.error}</div>
+                    <button onclick="ui.retryBrowserView('${sessionData.id}')" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button>
+                </div>
+            `;
+        }
+    }
+
+    async updateSessionUrl(sessionId, url) {
+        try {
+            // Update the session data
+            const sessionData = this.sessions.get(sessionId);
+            if (sessionData) {
+                sessionData.url = url;
+                sessionData.lastAccessed = new Date().toISOString();
+                
+                // Update in database (we'll need to add this IPC handler)
+                // For now, we'll just update locally
+                this.sessions.set(sessionId, sessionData);
+            }
+        } catch (error) {
+            console.error('Error updating session URL:', error);
+        }
+    }
+
+    async switchToTab(tabId) {
+        // Remove active class from all tabs and content
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        // Remove active class from session items
+        document.querySelectorAll('.session-item').forEach(item => item.classList.remove('active'));
+        
+        // Hide current browser view
+        if (this.activeTabId && this.activeTabId !== 'welcome' && this.activeTabId !== tabId) {
+            await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+        }
+        
+        // Add active class to selected tab and content
+        const selectedTab = document.querySelector(`[data-tab-id="${tabId}"]`);
+        const selectedContent = document.getElementById(`tab-${tabId}`);
+        
+        if (selectedTab) {
+            selectedTab.classList.add('active');
+        }
+        
+        if (selectedContent) {
+            selectedContent.classList.add('active');
+        }
+        
+        // Show browser view for this tab (if it's not welcome)
+        if (tabId !== 'welcome') {
+            await ipcRenderer.invoke('show-browser-view', tabId);
+            
+            // Highlight the session in sidebar
+            const sessionItem = document.querySelector(`[data-session-id="${tabId}"]`);
+            if (sessionItem) {
+                sessionItem.classList.add('active');
+            }
+        } else {
+            // When switching to welcome, make sure no browser view is shown
+            console.log('Switching to welcome tab - hiding all browser views');
+            // Hide any active browser view when switching to welcome
+            if (this.activeTabId && this.activeTabId !== 'welcome') {
+                try {
+                    await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+                } catch (error) {
+                    console.log('Error hiding browser view:', error);
+                }
+            }
+        }
+        
+        this.activeTabId = tabId;
+    }
+
+    async closeTab(sessionId) {
+        // Don't allow closing the welcome tab
+        if (sessionId === 'welcome') {
+            return;
+        }
+        
+        const tab = this.activeTabs.get(sessionId);
+        const tabContent = document.getElementById(`tab-${sessionId}`);
+        
+        // Close browser view
+        await ipcRenderer.invoke('close-browser-view', sessionId);
+        
+        if (tab) {
+            tab.remove();
+            this.activeTabs.delete(sessionId);
+        }
+        
+        if (tabContent) {
+            tabContent.remove();
+        }
+        
+        // If this was the active tab, switch to welcome or another tab
+        if (this.activeTabId === sessionId) {
+            if (this.activeTabs.size > 0) {
+                // Switch to the first available tab
+                const firstTabId = this.activeTabs.keys().next().value;
+                await this.switchToTab(firstTabId);
+            } else {
+                // Switch to welcome tab
+                await this.switchToTab('welcome');
+            }
+        }
+        
+        // Remove active state from session item
+        const sessionItem = document.querySelector(`[data-session-id="${sessionId}"]`);
+        if (sessionItem) {
+            sessionItem.classList.remove('active');
+        }
+    }
+
+    async deleteSession(sessionId) {
+        if (!confirm('Are you sure you want to delete this session? This will remove all associated data and cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const result = await ipcRenderer.invoke('delete-session', sessionId);
+            
+            if (result.success) {
+                this.showNotification('Session deleted successfully', 'success');
+                
+                            // Close the tab if it's open
+            if (this.activeTabs.has(sessionId)) {
+                await this.closeTab(sessionId);
+            }
+                
+                // Remove from sessions map
+                this.sessions.delete(sessionId);
+                
+                // Refresh the sessions list
+                this.loadSessions();
+            } else {
+                this.showNotification(`Error deleting session: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showNotification(`Error: ${error.message}`, 'error');
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        const notification = document.getElementById('notification');
+        notification.textContent = message;
+        notification.className = `notification ${type}`;
+        notification.classList.add('show');
+
+        setTimeout(() => {
+            notification.classList.remove('show');
+        }, 3000);
+    }
+
+    formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    async retryBrowserView(sessionId) {
+        const sessionData = this.sessions.get(sessionId);
+        
+        if (sessionData) {
+            console.log(`🔄 Retrying browser view for ${sessionData.name}`);
+            
+            // Close existing browser view
+            await ipcRenderer.invoke('close-browser-view', sessionId);
+            
+            // Create new browser view
+            const result = await ipcRenderer.invoke('create-browser-view', sessionId);
+            
+            if (result.success) {
+                console.log(`✅ Browser view recreated for ${sessionData.name}`);
+                // Show the browser view if this tab is active
+                if (this.activeTabId === sessionId) {
+                    await ipcRenderer.invoke('show-browser-view', sessionId);
+                }
+            }
+        }
+    }
+
+    updateTabTitle(sessionId, title) {
+        const tab = this.activeTabs.get(sessionId);
+        if (tab) {
+            const titleSpan = tab.querySelector('.tab-title');
+            if (titleSpan) {
+                // Preserve favicon if it exists
+                const existingFavicon = titleSpan.querySelector('.tab-favicon');
+                
+                const truncatedTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
+                
+                if (existingFavicon) {
+                    titleSpan.innerHTML = '';
+                    titleSpan.appendChild(existingFavicon);
+                    titleSpan.appendChild(document.createTextNode(truncatedTitle));
+                } else {
+                    titleSpan.textContent = truncatedTitle;
+                }
+                
+                console.log(`📄 Updated tab title for ${sessionId}: ${title}`);
+            }
+        }
+    }
+
+    updateTabFavicon(sessionId, favicon) {
+        const tab = this.activeTabs.get(sessionId);
+        if (tab) {
+            const titleSpan = tab.querySelector('.tab-title');
+            if (titleSpan) {
+                // Remove any existing favicon
+                const existingFavicon = titleSpan.querySelector('.tab-favicon');
+                if (existingFavicon) {
+                    existingFavicon.remove();
+                }
+
+                // Add new favicon
+                const faviconImg = document.createElement('img');
+                faviconImg.src = favicon;
+                faviconImg.className = 'tab-favicon';
+                faviconImg.style.cssText = 'width: 16px; height: 16px; margin-right: 6px; border-radius: 2px;';
+                
+                // Handle favicon load error
+                faviconImg.onerror = () => {
+                    faviconImg.remove();
+                };
+                
+                titleSpan.insertBefore(faviconImg, titleSpan.firstChild);
+                console.log(`🎯 Updated favicon for ${sessionId}: ${favicon}`);
+            }
+        }
+    }
+
+    setupContextMenu() {
+        const contextMenu = document.getElementById('contextMenu');
+        const renameBtn = document.getElementById('renameSession');
+        const deleteBtn = document.getElementById('deleteSessionContext');
+
+        console.log('🔧 Setting up context menu...', { contextMenu, renameBtn, deleteBtn });
+
+        if (!contextMenu || !renameBtn || !deleteBtn) {
+            console.error('❌ Context menu elements not found!');
+            return;
+        }
+
+        // Context menu item handlers with multiple event types
+        const handleRename = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔧 Rename button clicked, target:', this.contextMenuTarget);
+            await this.hideContextMenu();
+            this.showRenameModal();
+        };
+
+        const handleDelete = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔧 Delete button clicked, target:', this.contextMenuTarget);
+            await this.hideContextMenu();
+            if (this.contextMenuTarget) {
+                await this.deleteSession(this.contextMenuTarget);
+            }
+        };
+
+        // Add multiple event listeners for better compatibility
+        renameBtn.addEventListener('click', handleRename);
+        renameBtn.addEventListener('mousedown', handleRename);
+        
+        deleteBtn.addEventListener('click', handleDelete);
+        deleteBtn.addEventListener('mousedown', handleDelete);
+
+        // Add hover effects for debugging
+        renameBtn.addEventListener('mouseenter', () => {
+            console.log('🖱️ Hovering over rename button');
+            renameBtn.style.backgroundColor = '#f8f9fa';
+        });
+        
+        renameBtn.addEventListener('mouseleave', () => {
+            console.log('🖱️ Left rename button');
+            renameBtn.style.backgroundColor = '';
+        });
+
+        deleteBtn.addEventListener('mouseenter', () => {
+            console.log('🖱️ Hovering over delete button');
+            deleteBtn.style.backgroundColor = '#f8d7da';
+        });
+        
+        deleteBtn.addEventListener('mouseleave', () => {
+            console.log('🖱️ Left delete button');
+            deleteBtn.style.backgroundColor = '';
+        });
+
+        // Hide context menu when clicking outside
+        document.addEventListener('click', async (e) => {
+            if (this.contextMenuOpen && !contextMenu.contains(e.target)) {
+                console.log('🔧 Clicking outside context menu, hiding...');
+                await this.hideContextMenu();
+            }
+        });
+    }
+
+    setupRenameModal() {
+        const renameModal = document.getElementById('renameModal');
+        const closeRenameModal = document.getElementById('closeRenameModal');
+        const cancelRename = document.getElementById('cancelRename');
+        const renameForm = document.getElementById('renameSessionForm');
+
+        closeRenameModal.addEventListener('click', () => this.hideRenameModal());
+        cancelRename.addEventListener('click', () => this.hideRenameModal());
+        
+        renameForm.addEventListener('submit', (e) => this.handleRenameSession(e));
+
+        // Close rename modal when clicking outside
+        renameModal.addEventListener('click', (e) => {
+            if (e.target === renameModal) {
+                this.hideRenameModal();
+            }
+        });
+    }
+
+    async showContextMenu(event, sessionId) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const sessionData = this.sessions.get(sessionId);
+        if (!sessionData) return;
+
+        this.contextMenuTarget = sessionId;
+        this.contextMenuOpen = true;
+
+        const contextMenu = document.getElementById('contextMenu');
+        const contextMenuHeader = document.getElementById('contextMenuHeader');
+        
+        // Update header with session name
+        contextMenuHeader.textContent = sessionData.name;
+
+        // Position context menu
+        const x = event.clientX;
+        const y = event.clientY;
+        
+        // Ensure menu doesn't go off screen
+        const menuWidth = 200;
+        const menuHeight = 120;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+
+        const finalX = (x + menuWidth > windowWidth) ? windowWidth - menuWidth - 10 : x;
+        const finalY = (y + menuHeight > windowHeight) ? windowHeight - menuHeight - 10 : y;
+
+        // Force maximum z-index and positioning
+        contextMenu.style.cssText = `
+            position: fixed !important;
+            left: ${finalX}px !important;
+            top: ${finalY}px !important;
+            z-index: 2147483647 !important;
+            pointer-events: all !important;
+            background: white !important;
+        `;
+        contextMenu.classList.add('show');
+
+        console.log(`🖱️ Context menu opened for session: ${sessionData.name}`);
+    }
+
+    async hideContextMenu() {
+        const contextMenu = document.getElementById('contextMenu');
+        contextMenu.classList.remove('show');
+        this.contextMenuOpen = false;
+        this.contextMenuTarget = null;
+    }
+
+    showRenameModal() {
+        console.log('🔧 Opening rename modal for target:', this.contextMenuTarget);
+        
+        if (!this.contextMenuTarget) {
+            console.error('❌ No context menu target set');
+            return;
+        }
+
+        const sessionData = this.sessions.get(this.contextMenuTarget);
+        if (!sessionData) {
+            console.error('❌ Session data not found for:', this.contextMenuTarget);
+            return;
+        }
+
+        const renameModal = document.getElementById('renameModal');
+        const newSessionNameInput = document.getElementById('newSessionName');
+        
+        if (!renameModal || !newSessionNameInput) {
+            console.error('❌ Rename modal elements not found');
+            return;
+        }
+        
+        // Pre-fill with current name
+        newSessionNameInput.value = sessionData.name;
+        
+        // Force modal visibility
+        renameModal.style.cssText = `
+            display: flex !important;
+            position: fixed !important;
+            z-index: 2147483647 !important;
+            pointer-events: all !important;
+        `;
+        renameModal.classList.add('show');
+        
+        console.log('🔧 Rename modal should be visible now');
+        
+        setTimeout(() => {
+            newSessionNameInput.focus();
+            newSessionNameInput.select();
+        }, 100);
+    }
+
+    hideRenameModal() {
+        const renameModal = document.getElementById('renameModal');
+        renameModal.classList.remove('show');
+        document.getElementById('renameSessionForm').reset();
+    }
+
+    async handleRenameSession(e) {
+        e.preventDefault();
+        
+        if (!this.contextMenuTarget) return;
+
+        const newName = document.getElementById('newSessionName').value.trim();
+        if (!newName) {
+            this.showNotification('Please enter a session name', 'error');
+            return;
+        }
+
+        try {
+            const result = await ipcRenderer.invoke('rename-session', this.contextMenuTarget, newName);
+            
+            if (result.success) {
+                this.showNotification(`Session renamed to "${newName}"`, 'success');
+                this.hideRenameModal();
+                
+                // Update local session data
+                const sessionData = this.sessions.get(this.contextMenuTarget);
+                if (sessionData) {
+                    sessionData.name = newName;
+                    this.sessions.set(this.contextMenuTarget, sessionData);
+                }
+                
+                // Update tab title
+                this.updateTabTitle(this.contextMenuTarget, newName);
+                
+                // Refresh sessions list
+                await this.loadSessions();
+            } else {
+                this.showNotification(`Error renaming session: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showNotification(`Error: ${error.message}`, 'error');
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+}
+
+// Initialize the UI
+const ui = new MultiBrowserUI();
+window.multiBrowserApp = ui;
+
+// Global test functions for debugging
+window.testContextMenu = (sessionId) => {
+    console.log('🔧 Testing context menu for session:', sessionId);
+    const app = window.multiBrowserApp;
+    if (app) {
+        // Simulate a right-click event
+        const fakeEvent = {
+            preventDefault: () => {},
+            stopPropagation: () => {},
+            clientX: 400,
+            clientY: 300
+        };
+        app.contextMenuTarget = sessionId || 'session_test';
+        app.contextMenuOpen = true;
+        app.showContextMenu(fakeEvent, sessionId || 'session_test');
+    } else {
+        console.error('❌ App instance not found');
+    }
+};
+
+window.testRename = () => {
+    console.log('🔧 Testing rename modal...');
+    const app = window.multiBrowserApp;
+    if (app && app.sessions.size > 0) {
+        const firstSessionId = Array.from(app.sessions.keys())[0];
+        app.contextMenuTarget = firstSessionId;
+        app.showRenameModal();
+    } else {
+        console.error('❌ App instance not found or no sessions');
+    }
+};

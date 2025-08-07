@@ -1,0 +1,2 @@
+Add your app icon here as icon.png (256x256 recommended)
+For now, the app will use the default Electron icon.

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi Browser Manager</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar for session management -->
+        <div class="sidebar">
+            <header class="sidebar-header">
+                <h1>🌐 Multi Browser</h1>
+                <button id="newSessionBtn" class="btn btn-primary">
+                    ➕ New Session
+                </button>
+            </header>
+
+            <div class="sessions-list">
+                <div id="sessionsContainer">
+                    <div class="loading">Loading sessions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content area with tabs and browser views -->
+        <div class="main-area">
+            <!-- Tab bar -->
+            <div class="tab-bar">
+                <div class="tabs-container" id="tabsContainer">
+                    <div class="welcome-tab tab active" data-tab-id="welcome">
+                        <span class="tab-title">🏠 Welcome</span>
+                    </div>
+                </div>
+                <div class="tab-actions">
+                    <button id="newTabBtn" class="btn btn-small">➕</button>
+                </div>
+            </div>
+
+            <!-- Content area -->
+            <div class="content-area">
+                <!-- Welcome screen -->
+                <div class="tab-content active" id="tab-welcome">
+                    <div class="welcome-screen">
+                        <h2>Welcome to Multi Browser Manager</h2>
+                        <p>Create and manage multiple isolated browser sessions in one window.</p>
+                        
+                        <div class="quick-actions">
+                            <button class="btn btn-primary" id="createFirstSession">
+                                🚀 Create Your First Session
+                            </button>
+                        </div>
+
+                        <div class="features">
+                            <div class="feature">
+                                <h3>🔒 Isolated Sessions</h3>
+                                <p>Each session has separate cookies, storage, and login states</p>
+                            </div>
+                            <div class="feature">
+                                <h3>💾 Persistent Data</h3>
+                                <p>Sessions are saved and restored between app restarts</p>
+                            </div>
+                            <div class="feature">
+                                <h3>⚡ Fast Switching</h3>
+                                <p>Quickly switch between different browser sessions</p>
+                            </div>
+                            <div class="feature">
+                                <h3>🌐 Smart Link Handling</h3>
+                                <p>External links (target="_blank") open in your system browser</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for creating new sessions -->
+    <div id="sessionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Session</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <form id="createSessionForm">
+                <div class="form-group">
+                    <label for="sessionName">Session Name:</label>
+                    <input type="text" id="sessionName" placeholder="e.g., Work Account, Personal, Testing" required>
+                </div>
+                <div class="form-group">
+                    <label for="sessionUrl">Starting URL (optional):</label>
+                    <input type="url" id="sessionUrl" placeholder="https://example.com">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelSession">Cancel</button>
+                    <button type="submit" class="btn btn-primary">🚀 Create Session</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <!-- Context Menu -->
+    <div id="contextMenu" class="context-menu">
+        <div class="context-menu-header" id="contextMenuHeader">
+            Session Name
+        </div>
+        <button class="context-menu-item" id="renameSession">
+            <span>✏️</span>
+            <span>Rename Session</span>
+        </button>
+        <div class="context-menu-divider"></div>
+        <button class="context-menu-item danger" id="deleteSessionContext">
+            <span>🗑️</span>
+            <span>Delete Session</span>
+        </button>
+    </div>
+
+    <!-- Rename Modal -->
+    <div id="renameModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Rename Session</h2>
+                <button class="modal-close" id="closeRenameModal">&times;</button>
+            </div>
+            <form id="renameSessionForm">
+                <div class="form-group">
+                    <label for="newSessionName">New Session Name:</label>
+                    <input type="text" id="newSessionName" placeholder="Enter new session name" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelRename">Cancel</button>
+                    <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

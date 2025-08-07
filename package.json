@@ -1,0 +1,43 @@
+{
+  "name": "multi-browser",
+  "version": "1.0.0",
+  "description": "Desktop app for managing multiple isolated browser instances",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "dev": "electron . --dev"
+  },
+  "keywords": [
+    "browser",
+    "multi-instance",
+    "session",
+    "electron"
+  ],
+  "author": "User",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "node-json-db": "^2.3.0"
+  },
+  "build": {
+    "appId": "com.multibrowser.app",
+    "productName": "Multi Browser",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "node_modules/node-json-db/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    }
+  }
+}
