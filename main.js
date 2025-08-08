@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, BrowserView } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
@@ -10,13 +10,17 @@ class MultiBrowserApp {
     constructor() {
         this.mainWindow = null;
         this.sessionCounter = 0;
-        this.browserViews = new Map(); // sessionId -> BrowserView
+        this.browserViews = new Map(); // sessionId -> WebContentsView
         this.activeBrowserView = null;
         this.init();
     }
 
     init() {
         app.whenReady().then(() => {
+            console.log('Versões do sistema:');
+            console.log('Electron:', process.versions.electron);
+            console.log('Chrome/Chromium:', process.versions.chrome);
+            console.log('Node:', process.versions.node);
             this.createMainWindow();
             this.loadSavedSessions();
         });
@@ -65,13 +69,12 @@ class MultiBrowserApp {
         this.mainWindow.on('resize', () => {
             if (this.activeBrowserView) {
                 const bounds = this.mainWindow.getContentBounds();
-                const tabBarHeight = 50;
-                const sidebarWidth = 300;
+                const tabBarHeight = 45;
                 
                 this.activeBrowserView.setBounds({ 
-                    x: sidebarWidth,
+                    x: 0,
                     y: tabBarHeight,
-                    width: bounds.width - sidebarWidth, 
+                    width: bounds.width, 
                     height: bounds.height - tabBarHeight
                 });
             }
@@ -201,7 +204,7 @@ class MultiBrowserApp {
             const sessionData = await db.getData(`/sessions/${sessionId}`);
             const partitionName = sessionData.partition || `persist:session-${sessionId}`;
 
-            const view = new BrowserView({
+            const view = new WebContentsView({
                 webPreferences: {
                     partition: partitionName,
                     nodeIntegration: false,
@@ -215,6 +218,10 @@ class MultiBrowserApp {
             // Set up event handlers for the browser view
             this.setupBrowserViewEvents(view, sessionId);
             
+            // Configurar User Agent do Chrome para compatibilidade com WhatsApp Web
+            const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+            view.webContents.setUserAgent(chromeUserAgent);
+
             // Load the URL
             view.webContents.loadURL(sessionData.url);
 
@@ -235,22 +242,21 @@ class MultiBrowserApp {
 
             // Hide current view first
             if (this.activeBrowserView && this.activeBrowserView !== view) {
-                this.mainWindow.removeBrowserView(this.activeBrowserView);
+                this.mainWindow.contentView.removeChildView(this.activeBrowserView);
             }
 
             // Add the new view
-            this.mainWindow.addBrowserView(view);
+            this.mainWindow.contentView.addChildView(view);
             this.activeBrowserView = view;
 
             // Set bounds to content area with more conservative positioning
             const bounds = this.mainWindow.getContentBounds();
-            const tabBarHeight = 50; // Ensure tab bar is not covered
-            const sidebarWidth = 300; // Ensure sidebar is not covered
+            const tabBarHeight = 45; // Ensure tab bar is not covered
             
             view.setBounds({ 
-                x: sidebarWidth,
+                x: 0,
                 y: tabBarHeight,
-                width: bounds.width - sidebarWidth, 
+                width: bounds.width, 
                 height: bounds.height - tabBarHeight
             });
 
@@ -268,7 +274,7 @@ class MultiBrowserApp {
             console.log('🔧 [main] hideBrowserView called for', sessionId);
             const view = this.browserViews.get(sessionId);
             if (view && this.activeBrowserView === view) {
-                this.mainWindow.removeBrowserView(view);
+                this.mainWindow.contentView.removeChildView(view);
                 this.activeBrowserView = null;
             }
             return { success: true };
@@ -282,7 +288,7 @@ class MultiBrowserApp {
             const view = this.browserViews.get(sessionId);
             if (view) {
                 if (this.activeBrowserView === view) {
-                    this.mainWindow.removeBrowserView(view);
+                    this.mainWindow.contentView.removeChildView(view);
                     this.activeBrowserView = null;
                 }
                 view.webContents.destroy();
@@ -298,6 +304,10 @@ class MultiBrowserApp {
         try {
             const view = this.browserViews.get(sessionId);
             if (view) {
+                // Configurar User Agent antes de navegar
+                const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+                view.webContents.setUserAgent(chromeUserAgent);
+                
                 view.webContents.loadURL(url);
                 return { success: true };
             }

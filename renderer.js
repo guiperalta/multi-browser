@@ -7,8 +7,6 @@ class MultiBrowserUI {
         this.sessions = new Map(); // sessionId -> session data
         this.modalOpen = false;
         this.previousActiveTab = null;
-        this.contextMenuOpen = false;
-        this.contextMenuTarget = null;
         this.init();
     }
 
@@ -23,12 +21,6 @@ class MultiBrowserUI {
         window.addEventListener('error', (e) => {
             console.error('Global error:', e.error);
         });
-        
-        // Add global test function
-        window.testModal = () => {
-            console.log('🧪 Testing modal manually');
-            this.showCreateSessionModal();
-        };
 
         // Listen for page title updates from main process
         ipcRenderer.on('page-title-updated', (event, { sessionId, title }) => {
@@ -45,39 +37,16 @@ class MultiBrowserUI {
             const domain = new URL(url).hostname;
             this.showNotification(`Link opened in system browser: ${domain}`, 'info');
         });
-        
-        // Add debug listeners to form inputs
-        setTimeout(() => {
-            const nameInput = document.getElementById('sessionName');
-            const urlInput = document.getElementById('sessionUrl');
-            
-            if (nameInput) {
-                nameInput.addEventListener('click', () => console.log('🔧 Name input clicked!'));
-                nameInput.addEventListener('focus', () => console.log('🔧 Name input focused!'));
-                nameInput.addEventListener('input', () => console.log('🔧 Name input changed!'));
-            }
-            
-            if (urlInput) {
-                urlInput.addEventListener('click', () => console.log('🔧 URL input clicked!'));
-                urlInput.addEventListener('focus', () => console.log('🔧 URL input focused!'));
-                urlInput.addEventListener('input', () => console.log('🔧 URL input changed!'));
-            }
-        }, 1000);
     }
 
     setupEventListeners() {
         // Modal controls
-        const newSessionBtn = document.getElementById('newSessionBtn');
         const newTabBtn = document.getElementById('newTabBtn');
         const createFirstSession = document.getElementById('createFirstSession');
         const closeModal = document.getElementById('closeModal');
         const cancelSession = document.getElementById('cancelSession');
         const sessionModal = document.getElementById('sessionModal');
         
-        newSessionBtn.addEventListener('click', async () => {
-            console.log('🔧 New Session button clicked (sidebar)');
-            await this.showCreateSessionModal();
-        });
         newTabBtn.addEventListener('click', async () => {
             console.log('🔧 New Tab button clicked (tab bar)');
             await this.showCreateSessionModal();
@@ -122,13 +91,8 @@ class MultiBrowserUI {
         document.addEventListener('keydown', async (e) => {
             if (e.key === 'Escape' && sessionModal.classList.contains('show')) {
                 await this.hideCreateSessionModal();
-            } else if (e.key === 'Escape' && this.contextMenuOpen) {
-                await this.hideContextMenu();
             }
         });
-
-        // Setup context menu
-        this.setupContextMenu();
 
         // Setup rename modal
         this.setupRenameModal();
@@ -285,27 +249,43 @@ class MultiBrowserUI {
     }
 
     async loadSessions() {
-        const container = document.getElementById('sessionsContainer');
+        const container = document.getElementById('welcomeSessionsContainer');
         container.innerHTML = '<div class="loading">Loading sessions...</div>';
 
         try {
             const sessions = await ipcRenderer.invoke('get-sessions');
             this.renderSessions(sessions);
+
+            // Automatically open all sessions with a delay
+            if (sessions.length > 0) {
+                for (let i = 0; i < sessions.length; i++) {
+                    const session = sessions[i];
+                    try {
+                        // Add a delay between opening each session to prevent overwhelming resources
+                        await new Promise(resolve => setTimeout(resolve, 500 * i));
+                        await this.openSessionTab(session);
+                    } catch (error) {
+                        console.error(`Error opening session ${session.name}:`, error);
+                        this.showNotification(`Failed to open session "${session.name}": ${error.message}`, 'error');
+                    }
+                }
+            }
         } catch (error) {
             container.innerHTML = '<div class="error">Error loading sessions</div>';
         }
     }
 
     renderSessions(sessions) {
-        const container = document.getElementById('sessionsContainer');
+        const welcomeContainer = document.getElementById('welcomeSessionsContainer');
         
         if (sessions.length === 0) {
-            container.innerHTML = `
+            const emptyState = `
                 <div class="empty-state">
                     <h3>No sessions yet</h3>
                     <p>Create your first browser session to get started!</p>
                 </div>
             `;
+            welcomeContainer.innerHTML = emptyState;
             return;
         }
 
@@ -318,20 +298,32 @@ class MultiBrowserUI {
         // Sort sessions by last accessed (most recent first)
         sessions.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
 
-        container.innerHTML = sessions.map(session => `
-            <div class="session-item" data-session-id="${session.id}" onclick="ui.openSessionTab('${session.id}')">
-                <h3>${this.escapeHtml(session.name)}</h3>
-                <div class="session-url">${this.escapeHtml(session.url)}</div>
-                <div class="session-meta">
-                    Last accessed: ${this.formatDate(session.lastAccessed)}
+        // Generate welcome tab sessions (expanded view with more actions)
+        const welcomeHtml = sessions.map(session => `
+            <div class="welcome-session-item">
+                <div class="session-info">
+                    <h4>${this.escapeHtml(session.name)}</h4>
+                    <div class="session-url">${this.escapeHtml(session.url)}</div>
+                    <div class="session-meta">
+                        Created: ${this.formatDate(session.created)} | Last accessed: ${this.formatDate(session.lastAccessed)}
+                    </div>
                 </div>
-                <div class="session-actions" onclick="event.stopPropagation()">
+                <div class="session-actions">
+                    <button class="btn btn-primary btn-small" onclick="ui.openSessionTab('${session.id}')">
+                        🌐 Open
+                    </button>
+                    <button class="btn btn-secondary btn-small" onclick="ui.showRenameModal('${session.id}')">
+                        ✏️ Rename
+                    </button>
                     <button class="btn btn-danger btn-small" onclick="ui.deleteSession('${session.id}')">
                         🗑️ Delete
                     </button>
                 </div>
             </div>
         `).join('');
+
+        // Update both containers
+        welcomeContainer.innerHTML = welcomeHtml;
     }
 
     async openSessionTab(sessionIdOrData) {
@@ -387,11 +379,6 @@ class MultiBrowserUI {
                 this.switchToTab(sessionData.id);
             }
         });
-
-        // Add right-click context menu (but not for welcome tab)
-        tab.addEventListener('contextmenu', async (e) => {
-            await this.showContextMenu(e, sessionData.id);
-        });
         
         tabsContainer.appendChild(tab);
         this.activeTabs.set(sessionData.id, tab);
@@ -410,7 +397,7 @@ class MultiBrowserUI {
         browserContainer.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #f5f5f5;">
                 <div style="font-size: 24px; margin-bottom: 10px;">🌐</div>
-                <div>Loading ${sessionData.name}...</div>
+                <div>${sessionData.name}</div>
                 <div style="font-size: 12px; color: #666; margin-top: 5px;">${sessionData.url}</div>
             </div>
         `;
@@ -483,12 +470,6 @@ class MultiBrowserUI {
         // Show browser view for this tab (if it's not welcome)
         if (tabId !== 'welcome') {
             await ipcRenderer.invoke('show-browser-view', tabId);
-            
-            // Highlight the session in sidebar
-            const sessionItem = document.querySelector(`[data-session-id="${tabId}"]`);
-            if (sessionItem) {
-                sessionItem.classList.add('active');
-            }
         } else {
             // When switching to welcome, make sure no browser view is shown
             console.log('Switching to welcome tab - hiding all browser views');
@@ -617,10 +598,14 @@ class MultiBrowserUI {
         if (tab) {
             const titleSpan = tab.querySelector('.tab-title');
             if (titleSpan) {
+                // Get session name instead of using page title
+                const sessionData = this.sessions.get(sessionId);
+                const sessionName = sessionData ? sessionData.name : 'Session';
+                
                 // Preserve favicon if it exists
                 const existingFavicon = titleSpan.querySelector('.tab-favicon');
                 
-                const truncatedTitle = title.length > 20 ? title.substring(0, 20) + '...' : title;
+                const truncatedTitle = sessionName.length > 20 ? sessionName.substring(0, 20) + '...' : sessionName;
                 
                 if (existingFavicon) {
                     titleSpan.innerHTML = '';
@@ -630,7 +615,7 @@ class MultiBrowserUI {
                     titleSpan.textContent = truncatedTitle;
                 }
                 
-                console.log(`📄 Updated tab title for ${sessionId}: ${title}`);
+                console.log(`📄 Updated tab title for ${sessionId}: ${sessionName}`);
             }
         }
     }
@@ -737,15 +722,34 @@ class MultiBrowserUI {
         const cancelRename = document.getElementById('cancelRename');
         const renameForm = document.getElementById('renameSessionForm');
 
-        closeRenameModal.addEventListener('click', () => this.hideRenameModal());
-        cancelRename.addEventListener('click', () => this.hideRenameModal());
+        if (!renameModal || !closeRenameModal || !cancelRename || !renameForm) {
+            console.error('❌ Rename modal elements not found during setup');
+            return;
+        }
+
+        closeRenameModal.addEventListener('click', async () => {
+            await this.hideRenameModal();
+        });
         
-        renameForm.addEventListener('submit', (e) => this.handleRenameSession(e));
+        cancelRename.addEventListener('click', async () => {
+            await this.hideRenameModal();
+        });
+        
+        renameForm.addEventListener('submit', async (e) => {
+            await this.handleRenameSession(e);
+        });
 
         // Close rename modal when clicking outside
-        renameModal.addEventListener('click', (e) => {
+        renameModal.addEventListener('click', async (e) => {
             if (e.target === renameModal) {
-                this.hideRenameModal();
+                await this.hideRenameModal();
+            }
+        });
+
+        // ESC key to close modal
+        document.addEventListener('keydown', async (e) => {
+            if (e.key === 'Escape' && renameModal.classList.contains('show')) {
+                await this.hideRenameModal();
             }
         });
     }
@@ -800,30 +804,46 @@ class MultiBrowserUI {
         this.contextMenuTarget = null;
     }
 
-    showRenameModal() {
-        console.log('🔧 Opening rename modal for target:', this.contextMenuTarget);
+    async showRenameModal(sessionId) {
+        console.log('🔧 Opening rename modal for session:', sessionId);
         
-        if (!this.contextMenuTarget) {
-            console.error('❌ No context menu target set');
+        if (!sessionId) {
+            console.error('❌ No session ID provided');
             return;
         }
 
-        const sessionData = this.sessions.get(this.contextMenuTarget);
+        const sessionData = this.sessions.get(sessionId);
         if (!sessionData) {
-            console.error('❌ Session data not found for:', this.contextMenuTarget);
+            console.error('❌ Session data not found for:', sessionId);
             return;
         }
 
         const renameModal = document.getElementById('renameModal');
         const newSessionNameInput = document.getElementById('newSessionName');
+        const renameForm = document.getElementById('renameSessionForm');
         
-        if (!renameModal || !newSessionNameInput) {
+        if (!renameModal || !newSessionNameInput || !renameForm) {
             console.error('❌ Rename modal elements not found');
             return;
+        }
+
+        // Store current active tab and hide browser view
+        this.previousActiveTab = this.activeTabId;
+        
+        // Hide any active browser view to prevent it from covering the modal
+        if (this.activeTabId && this.activeTabId !== 'welcome') {
+            try {
+                await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+            } catch (error) {
+                console.log('Error hiding browser view:', error);
+            }
         }
         
         // Pre-fill with current name
         newSessionNameInput.value = sessionData.name;
+        
+        // Store the session ID in the form
+        renameForm.dataset.sessionId = sessionId;
         
         // Force modal visibility
         renameModal.style.cssText = `
@@ -831,6 +851,7 @@ class MultiBrowserUI {
             position: fixed !important;
             z-index: 2147483647 !important;
             pointer-events: all !important;
+            background: rgba(0, 0, 0, 0.5) !important;
         `;
         renameModal.classList.add('show');
         
@@ -842,16 +863,32 @@ class MultiBrowserUI {
         }, 100);
     }
 
-    hideRenameModal() {
+    async hideRenameModal() {
         const renameModal = document.getElementById('renameModal');
         renameModal.classList.remove('show');
         document.getElementById('renameSessionForm').reset();
+        
+        // Clear all inline styles from the modal
+        renameModal.style.cssText = '';
+        renameModal.style.display = 'none';
+        
+        // Restore the browser view if we had one active
+        if (this.previousActiveTab && this.previousActiveTab !== 'welcome') {
+            try {
+                await ipcRenderer.invoke('show-browser-view', this.previousActiveTab);
+            } catch (error) {
+                console.error('Error restoring browser view:', error);
+            }
+        }
+        
+        this.previousActiveTab = null;
     }
 
     async handleRenameSession(e) {
         e.preventDefault();
         
-        if (!this.contextMenuTarget) return;
+        const sessionId = e.target.dataset.sessionId;
+        if (!sessionId) return;
 
         const newName = document.getElementById('newSessionName').value.trim();
         if (!newName) {
@@ -860,21 +897,21 @@ class MultiBrowserUI {
         }
 
         try {
-            const result = await ipcRenderer.invoke('rename-session', this.contextMenuTarget, newName);
+            const result = await ipcRenderer.invoke('rename-session', sessionId, newName);
             
             if (result.success) {
                 this.showNotification(`Session renamed to "${newName}"`, 'success');
                 this.hideRenameModal();
                 
                 // Update local session data
-                const sessionData = this.sessions.get(this.contextMenuTarget);
+                const sessionData = this.sessions.get(sessionId);
                 if (sessionData) {
                     sessionData.name = newName;
-                    this.sessions.set(this.contextMenuTarget, sessionData);
+                    this.sessions.set(sessionId, sessionData);
                 }
                 
                 // Update tab title
-                this.updateTabTitle(this.contextMenuTarget, newName);
+                this.updateTabTitle(sessionId, newName);
                 
                 // Refresh sessions list
                 await this.loadSessions();

@@ -8,29 +8,13 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Sidebar for session management -->
-        <div class="sidebar">
-            <header class="sidebar-header">
-                <h1>🌐 Multi Browser</h1>
-                <button id="newSessionBtn" class="btn btn-primary">
-                    ➕ New Session
-                </button>
-            </header>
-
-            <div class="sessions-list">
-                <div id="sessionsContainer">
-                    <div class="loading">Loading sessions...</div>
-                </div>
-            </div>
-        </div>
-
         <!-- Main content area with tabs and browser views -->
         <div class="main-area">
             <!-- Tab bar -->
             <div class="tab-bar">
                 <div class="tabs-container" id="tabsContainer">
                     <div class="welcome-tab tab active" data-tab-id="welcome">
-                        <span class="tab-title">🏠 Welcome</span>
+                        <span class="tab-title">🏠</span>
                     </div>
                 </div>
                 <div class="tab-actions">
@@ -50,6 +34,13 @@
                             <button class="btn btn-primary" id="createFirstSession">
                                 🚀 Create Your First Session
                             </button>
+                        </div>
+
+                        <div class="welcome-sessions-section">
+                            <h3>Your Sessions</h3>
+                            <div id="welcomeSessionsContainer">
+                                <div class="loading">Loading sessions...</div>
+                            </div>
                         </div>
 
                         <div class="features">
@@ -102,21 +93,6 @@
 
     <div id="notification" class="notification"></div>
 
-    <!-- Context Menu -->
-    <div id="contextMenu" class="context-menu">
-        <div class="context-menu-header" id="contextMenuHeader">
-            Session Name
-        </div>
-        <button class="context-menu-item" id="renameSession">
-            <span>✏️</span>
-            <span>Rename Session</span>
-        </button>
-        <div class="context-menu-divider"></div>
-        <button class="context-menu-item danger" id="deleteSessionContext">
-            <span>🗑️</span>
-            <span>Delete Session</span>
-        </button>
-    </div>
 
     <!-- Rename Modal -->
     <div id="renameModal" class="modal">
