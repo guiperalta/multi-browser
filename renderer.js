@@ -37,6 +37,22 @@ class MultiBrowserUI {
             const domain = new URL(url).hostname;
             this.showNotification(`Link opened in system browser: ${domain}`, 'info');
         });
+
+        // Log any site notifications forwarded from main
+        ipcRenderer.on('site-notification', (_e, { sessionId, title, options, url }) => {
+            console.log(`[Site notification][${sessionId || 'unknown'}] ${title} | ${options?.body || ''} | ${url}`);
+        });
+
+        // Focus a specific session when a system notification is clicked
+        ipcRenderer.on('focus-session', async (_e, { sessionId }) => {
+            if (!sessionId) return;
+            try {
+                await this.openSessionTab(sessionId);
+                await this.switchToTab(sessionId);
+            } catch (err) {
+                console.error('Failed to focus session from notification click:', err);
+            }
+        });
     }
 
     setupEventListeners() {
@@ -595,12 +611,21 @@ class MultiBrowserUI {
 
     updateTabTitle(sessionId, title) {
         const tab = this.activeTabs.get(sessionId);
+        console.log('New title:', title);
         if (tab) {
             const titleSpan = tab.querySelector('.tab-title');
             if (titleSpan) {
+                console.log('Title span:', titleSpan);
                 // Get session name instead of using page title
                 const sessionData = this.sessions.get(sessionId);
-                const sessionName = sessionData ? sessionData.name : 'Session';
+                console.log('Session data:', sessionData);
+                //if title has ('any number'), add it to the beginning of the session name
+                if (title.includes('(')) {
+                    const number = title.split('(')[1].split(')')[0];
+                    sessionData.name = '('+number+') '+sessionData.name.split(') ')[1];
+                    console.log('New title:', sessionData.name);
+                }
+                const sessionName = sessionData.name ? sessionData.name : 'Session';
                 
                 // Preserve favicon if it exists
                 const existingFavicon = titleSpan.querySelector('.tab-favicon');

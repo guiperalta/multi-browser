@@ -15,12 +15,25 @@ class MultiBrowserApp {
         this.init();
     }
 
+    // Resolve a sessionId from a WebContents reference
+    getSessionIdByWebContents(webContents) {
+        for (const [sid, view] of this.browserViews) {
+            if (view && view.webContents === webContents) {
+                return sid;
+            }
+        }
+        return null;
+    }
+
     init() {
         app.whenReady().then(() => {
-            console.log('Versões do sistema:');
-            console.log('Electron:', process.versions.electron);
-            console.log('Chrome/Chromium:', process.versions.chrome);
-            console.log('Node:', process.versions.node);
+            // Ensure proper Windows notification activation routing
+            try {
+                app.setAppUserModelId('com.multibrowser.app');
+            } catch {}
+            console.log('Electron version:', process.versions.electron);
+            console.log('Chrome/Chromium version:', process.versions.chrome);
+            console.log('Node version:', process.versions.node);
             this.createMainWindow();
             this.loadSavedSessions();
         });
@@ -39,6 +52,44 @@ class MultiBrowserApp {
         });
 
         this.setupIPC();
+
+        // Notification IPC: map notifications back to sessions and log
+        ipcMain.on('site-notification', (event, { title, options, url }) => {
+            const sessionId = this.getSessionIdByWebContents(event.sender);
+            console.log(`[Site notification] session=${sessionId || 'unknown'} title="${title}" body="${options?.body || ''}" url=${url}`);
+            if (this.mainWindow) {
+                this.mainWindow.webContents.send('site-notification', { sessionId, title, options, url });
+            }
+        });
+
+        // Show a first-class native notification we can handle clicks for
+        ipcMain.on('show-native-notification', (event, payload) => {
+            const sessionId = this.getSessionIdByWebContents(event.sender);
+            const { title, options, url } = payload || {};
+            try {
+                const body = options?.body || '';
+                new Notification({ title, body, silent: options?.silent === true }).show();
+            } catch (err) {
+                console.error('Failed to show native notification:', err);
+            }
+            // Track sender to focus on click via a single-use channel
+            this._lastNotificationSessionId = sessionId;
+        });
+
+        ipcMain.on('site-notification-click', (event) => {
+            // Prefer explicit mapping stored when we showed the native notification
+            const sessionId = this._lastNotificationSessionId || this.getSessionIdByWebContents(event.sender);
+            if (!sessionId) return;
+            // Bring window to front and ask renderer to focus the session tab
+            if (this.mainWindow) {
+                // On Windows ensure the window is restored and focused
+                if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+                this.mainWindow.show();
+                this.mainWindow.focus();
+                this.mainWindow.webContents.send('focus-session', { sessionId });
+            }
+            this._lastNotificationSessionId = undefined;
+        });
     }
 
     createMainWindow() {
@@ -209,7 +260,8 @@ class MultiBrowserApp {
                     partition: partitionName,
                     nodeIntegration: false,
                     contextIsolation: true,
-                    webSecurity: true
+                    webSecurity: true,
+                    preload: path.join(__dirname, 'preload', 'notifications.js')
                 }
             });
 
