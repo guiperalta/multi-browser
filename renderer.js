@@ -5,6 +5,7 @@ class MultiBrowserUI {
         this.activeTabs = new Map(); // sessionId -> tab element
         this.activeTabId = 'welcome';
         this.sessions = new Map(); // sessionId -> session data
+        this.originalSessionNames = new Map(); // sessionId -> original user-defined name
         this.modalOpen = false;
         this.previousActiveTab = null;
         this.init();
@@ -23,8 +24,8 @@ class MultiBrowserUI {
         });
 
         // Listen for page title updates from main process
-        ipcRenderer.on('page-title-updated', (event, { sessionId, title }) => {
-            this.updateTabTitle(sessionId, title);
+        ipcRenderer.on('page-title-updated', (event, { sessionId, title, unreadCount }) => {
+            this.updateTabTitleWithUnreadCount(sessionId, title, unreadCount);
         });
 
         // Listen for favicon updates from main process
@@ -307,8 +308,10 @@ class MultiBrowserUI {
 
         // Store sessions for easy access
         this.sessions.clear();
+        this.originalSessionNames.clear(); // Clear original names
         sessions.forEach(session => {
             this.sessions.set(session.id, session);
+            this.originalSessionNames.set(session.id, session.name); // Store original name
         });
 
         // Sort sessions by last accessed (most recent first)
@@ -381,6 +384,9 @@ class MultiBrowserUI {
 
     createTab(sessionData) {
         const tabsContainer = document.getElementById('tabsContainer');
+        
+        // Store original session name
+        this.originalSessionNames.set(sessionData.id, sessionData.name);
         
         const tab = document.createElement('div');
         tab.className = 'tab';
@@ -609,28 +615,25 @@ class MultiBrowserUI {
         }
     }
 
-    updateTabTitle(sessionId, title) {
+    updateTabTitleWithUnreadCount(sessionId, title, unreadCount) {
         const tab = this.activeTabs.get(sessionId);
-        console.log('New title:', title);
         if (tab) {
             const titleSpan = tab.querySelector('.tab-title');
             if (titleSpan) {
-                console.log('Title span:', titleSpan);
-                // Get session name instead of using page title
+                // Get original session name
                 const sessionData = this.sessions.get(sessionId);
-                console.log('Session data:', sessionData);
-                //if title has ('any number'), add it to the beginning of the session name
-                if (title.includes('(')) {
-                    const number = title.split('(')[1].split(')')[0];
-                    sessionData.name = '('+number+') '+sessionData.name.split(') ')[1];
-                    console.log('New title:', sessionData.name);
+                const originalName = this.originalSessionNames.get(sessionId) || sessionData?.name || 'Session';
+                
+                // Build display title with unread count
+                let displayTitle = originalName;
+                if (unreadCount && unreadCount !== 0 && unreadCount !== '0') {
+                    displayTitle = `(${unreadCount}) ${originalName}`;
                 }
-                const sessionName = sessionData.name ? sessionData.name : 'Session';
                 
                 // Preserve favicon if it exists
                 const existingFavicon = titleSpan.querySelector('.tab-favicon');
                 
-                const truncatedTitle = sessionName.length > 20 ? sessionName.substring(0, 20) + '...' : sessionName;
+                const truncatedTitle = displayTitle.length > 20 ? displayTitle.substring(0, 20) + '...' : displayTitle;
                 
                 if (existingFavicon) {
                     titleSpan.innerHTML = '';
@@ -640,9 +643,14 @@ class MultiBrowserUI {
                     titleSpan.textContent = truncatedTitle;
                 }
                 
-                console.log(`📄 Updated tab title for ${sessionId}: ${sessionName}`);
+                console.log(`📄 Updated tab title for ${sessionId}: ${displayTitle} (from original: ${originalName})`);
             }
         }
+    }
+
+    // Keep original function for backwards compatibility
+    updateTabTitle(sessionId, title) {
+        this.updateTabTitleWithUnreadCount(sessionId, title, 0);
     }
 
     updateTabFavicon(sessionId, favicon) {
@@ -935,8 +943,11 @@ class MultiBrowserUI {
                     this.sessions.set(sessionId, sessionData);
                 }
                 
-                // Update tab title
-                this.updateTabTitle(sessionId, newName);
+                // Update stored original name
+                this.originalSessionNames.set(sessionId, newName);
+                
+                // Update tab title (this will reset to show just the new name without unread count)
+                this.updateTabTitleWithUnreadCount(sessionId, newName, 0);
                 
                 // Refresh sessions list
                 await this.loadSessions();

@@ -268,7 +268,7 @@ class MultiBrowserApp {
             this.browserViews.set(sessionId, view);
             
             // Set up event handlers for the browser view
-            this.setupBrowserViewEvents(view, sessionId);
+            this.setupBrowserViewEvents(view, sessionId, sessionData.name);
             
             // Configurar User Agent do Chrome para compatibilidade com WhatsApp Web
             const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
@@ -385,7 +385,7 @@ class MultiBrowserApp {
         }
     }
 
-    setupBrowserViewEvents(view, sessionId) {
+    setupBrowserViewEvents(view, sessionId, sessionName) {
         // Handle new window requests (target="_blank" links)
         view.webContents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
             console.log(`🔗 New window requested: ${url}`);
@@ -430,8 +430,16 @@ class MultiBrowserApp {
         // Handle page title updates
         view.webContents.on('page-title-updated', (event, title) => {
             console.log(`📄 Page title updated for session ${sessionId}: ${title}`);
-            // Send title update to renderer
-            this.mainWindow.webContents.send('page-title-updated', { sessionId, title });
+            
+            // Extract unread message count from title
+            const unreadCount = this.extractUnreadCount(title);
+            
+            // Send title update to renderer with unread count
+            this.mainWindow.webContents.send('page-title-updated', { 
+                sessionId, 
+                title, 
+                unreadCount 
+            });
         });
 
         // Handle favicon updates
@@ -456,6 +464,33 @@ class MultiBrowserApp {
         view.webContents.on('responsive', () => {
             console.log(`✅ WebContents responsive again for session ${sessionId}`);
         });
+    }
+
+    // Function to extract unread message count from page title
+    extractUnreadCount(title) {
+        if (!title) return 0;
+        
+        // WhatsApp Web patterns:
+        // "(5) WhatsApp" - 5 unread messages
+        // "WhatsApp" - no unread messages
+        // "(99+) WhatsApp" - 99+ unread messages
+        
+        // Look for pattern like "(number)" or "(number+)" at the beginning
+        const match = title.match(/^\((\d+\+?)\)/);
+        
+        if (match) {
+            const count = match[1];
+            // Return the count as string to preserve "+" if present
+            return count;
+        }
+        
+        // Also check for other common patterns like "5 WhatsApp" or "WhatsApp (5)"
+        const altMatch = title.match(/(\d+\+?)\s+\w+/) || title.match(/\w+\s+\((\d+\+?)\)/);
+        if (altMatch) {
+            return altMatch[1];
+        }
+        
+        return 0; // No unread messages found
     }
 
     cleanup() {
