@@ -9,6 +9,8 @@ const { ipcRenderer } = require('electron');
 
     class InterceptedNotification extends NativeNotification {
       constructor(title, options = {}) {
+        console.log('[preload] Intercepting notification:', { title, options });
+        
         // Do NOT show Chromium's native toast; instead render a controlled one in main
         // by sending IPC. We still construct a minimal object by calling super with
         // an empty, muted notification and closing it immediately.
@@ -18,18 +20,24 @@ const { ipcRenderer } = require('electron');
         } catch { /* ignore */ }
 
         try {
+          console.log('[preload] Sending show-native-notification to main process');
           // Ask main to show a native notification we can reliably click
           ipcRenderer.send('show-native-notification', {
             title,
             options,
             url: location.href,
           });
-        } catch {}
+        } catch (err) {
+          console.error('[preload] Error sending show-native-notification:', err);
+        }
 
         try {
+          console.log('[preload] Sending site-notification for logging');
           // Forward metadata for logging purposes
           ipcRenderer.send('site-notification', { title, options, url: location.href });
-        } catch {}
+        } catch (err) {
+          console.error('[preload] Error sending site-notification:', err);
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
@@ -12,6 +12,7 @@ class MultiBrowserApp {
         this.sessionCounter = 0;
         this.browserViews = new Map(); // sessionId -> WebContentsView
         this.activeBrowserView = null;
+        this.activeNotifications = new Map(); // sessionId -> notification objects
         this.init();
     }
 
@@ -31,6 +32,10 @@ class MultiBrowserApp {
             try {
                 app.setAppUserModelId('com.multibrowser.app');
             } catch {}
+            
+            // Check and log notification support
+            console.log('🔔 Notification support:', Notification.isSupported());
+            
             console.log('Electron version:', process.versions.electron);
             console.log('Chrome/Chromium version:', process.versions.chrome);
             console.log('Node version:', process.versions.node);
@@ -66,30 +71,147 @@ class MultiBrowserApp {
         ipcMain.on('show-native-notification', (event, payload) => {
             const sessionId = this.getSessionIdByWebContents(event.sender);
             const { title, options, url } = payload || {};
+            
+            console.log(`🔔 Creating native notification for session ${sessionId}: "${title}"`);
+            console.log(`🔔 Notification options:`, options);
+            console.log(`🔔 URL: ${url}`);
+            
             try {
                 const body = options?.body || '';
-                new Notification({ title, body, silent: options?.silent === true }).show();
+                const notification = new Notification({ 
+                    title, 
+                    body, 
+                    silent: options?.silent === true,
+                    icon: path.join(__dirname, 'assets', 'icon.png') // Add app icon to notification
+                });
+                
+                // Handle notification click
+                notification.on('click', () => {
+                    console.log(`🔔 REAL NOTIFICATION CLICKED for session ${sessionId}`);
+                    console.log(`🔔 Will focus session: ${sessionId}`);
+                    this.handleNotificationClick(sessionId);
+                    
+                    // Remove this notification from active notifications
+                    this.activeNotifications.delete(sessionId);
+                });
+                
+                // Handle notification close
+                notification.on('close', () => {
+                    console.log(`🔔 REAL NOTIFICATION CLOSED for session ${sessionId}`);
+                    // Remove this notification from active notifications
+                    this.activeNotifications.delete(sessionId);
+                });
+                
+                // Store the notification for this session
+                this.activeNotifications.set(sessionId, notification);
+                
+                notification.show();
+                
+                console.log(`🔔 REAL notification shown and tracked for session ${sessionId}`);
+                
             } catch (err) {
                 console.error('Failed to show native notification:', err);
             }
-            // Track sender to focus on click via a single-use channel
-            this._lastNotificationSessionId = sessionId;
         });
+    }
 
-        ipcMain.on('site-notification-click', (event) => {
-            // Prefer explicit mapping stored when we showed the native notification
-            const sessionId = this._lastNotificationSessionId || this.getSessionIdByWebContents(event.sender);
-            if (!sessionId) return;
-            // Bring window to front and ask renderer to focus the session tab
-            if (this.mainWindow) {
-                // On Windows ensure the window is restored and focused
-                if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-                this.mainWindow.show();
-                this.mainWindow.focus();
-                this.mainWindow.webContents.send('focus-session', { sessionId });
+    // Test notification functionality
+    testNotification() {
+        console.log('🧪 Creating test notification...');
+        
+        try {
+            // Get first available session for testing
+            const firstSessionId = Array.from(this.browserViews.keys())[0];
+            
+            if (!firstSessionId) {
+                console.log('🧪 No active sessions found for testing');
+                return;
             }
-            this._lastNotificationSessionId = undefined;
-        });
+            
+            // Use the same Notification constructor that works in the show-native-notification handler
+            const { Notification } = require('electron');
+            const notification = new Notification({ 
+                title: 'Test Notification', 
+                body: `Click to focus session: ${firstSessionId}`,
+                icon: path.join(__dirname, 'assets', 'icon.png')
+            });
+            
+            notification.on('click', () => {
+                console.log(`🧪 Test notification clicked - focusing session ${firstSessionId}`);
+                this.handleNotificationClick(firstSessionId);
+                this.activeNotifications.delete(firstSessionId);
+            });
+            
+            notification.on('close', () => {
+                console.log('🧪 Test notification closed');
+                this.activeNotifications.delete(firstSessionId);
+            });
+            
+            this.activeNotifications.set(firstSessionId, notification);
+            notification.show();
+            
+            console.log(`🧪 Test notification created for session ${firstSessionId}`);
+            
+        } catch (error) {
+            console.error('🧪 Error creating test notification:', error);
+        }
+    }
+
+    // Handle notification click events
+    handleNotificationClick(sessionId) {
+        console.log(`🎯 ========== NOTIFICATION CLICK HANDLER ==========`);
+        console.log(`🎯 Session ID: ${sessionId}`);
+        console.log(`🎯 Main window exists: ${!!this.mainWindow}`);
+        console.log(`🎯 Main window destroyed: ${this.mainWindow ? this.mainWindow.isDestroyed() : 'N/A'}`);
+        
+        if (!this.mainWindow) {
+            console.warn('Main window not available for notification click');
+            return;
+        }
+
+        try {
+            console.log(`🎯 Current window state:`);
+            console.log(`   - Minimized: ${this.mainWindow.isMinimized()}`);
+            console.log(`   - Visible: ${this.mainWindow.isVisible()}`);
+            console.log(`   - Focused: ${this.mainWindow.isFocused()}`);
+            
+            // Bring window to front and focus it
+            if (this.mainWindow.isMinimized()) {
+                this.mainWindow.restore();
+                console.log('🔄 Window restored from minimized state');
+            }
+            
+            if (!this.mainWindow.isVisible()) {
+                this.mainWindow.show();
+                console.log('👁️ Window shown');
+            }
+            
+            this.mainWindow.focus();
+            this.mainWindow.setAlwaysOnTop(true);
+            console.log('🎯 Window focused and set to always on top');
+            
+            // Remove always on top after a short delay to ensure focus
+            setTimeout(() => {
+                if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                    this.mainWindow.setAlwaysOnTop(false);
+                    console.log('🎯 Always on top removed');
+                }
+            }, 1000);
+            
+            console.log('🎯 Window focused and brought to front');
+            
+            // Send focus command to renderer to switch to the correct session
+            this.mainWindow.webContents.send('focus-session', { 
+                sessionId,
+                source: 'notification-click'
+            });
+            
+            console.log(`📨 Sent focus-session command for ${sessionId}`);
+            console.log(`🎯 ===============================================`);
+            
+        } catch (error) {
+            console.error('Error handling notification click:', error);
+        }
     }
 
     createMainWindow() {
@@ -115,6 +237,14 @@ class MultiBrowserApp {
         if (process.env.NODE_ENV === 'development') {
             this.mainWindow.webContents.openDevTools();
         }
+        
+        // Add keyboard shortcut to test notifications (Ctrl+T)
+        this.mainWindow.webContents.on('before-input-event', (event, input) => {
+            if (input.control && input.key.toLowerCase() === 't' && input.type === 'keyDown') {
+                console.log('🧪 Testing notification...');
+                this.testNotification();
+            }
+        });
         
         // Handle window resize to update browser view bounds
         this.mainWindow.on('resize', () => {
@@ -427,6 +557,69 @@ class MultiBrowserApp {
             }
         });
 
+        // Handle file downloads
+        view.webContents.session.on('will-download', (event, item, webContents) => {
+            console.log(`📥 Download started: ${item.getFilename()}`);
+            console.log(`📥 Original URL: ${item.getURL()}`);
+            console.log(`📥 File size: ${item.getTotalBytes()} bytes`);
+            
+            // Set download path to user's Downloads folder
+            const os = require('os');
+            const downloadsPath = path.join(os.homedir(), 'Downloads');
+            const fileName = item.getFilename();
+            const fullPath = path.join(downloadsPath, fileName);
+            
+            // Ensure Downloads directory exists
+            try {
+                if (!require('fs').existsSync(downloadsPath)) {
+                    require('fs').mkdirSync(downloadsPath, { recursive: true });
+                }
+            } catch (dirError) {
+                console.error('Error creating downloads directory:', dirError);
+            }
+            
+            item.setSavePath(fullPath);
+            console.log(`📥 Download will be saved to: ${fullPath}`);
+            
+            // Handle download completion
+            item.once('done', (event, state) => {
+                if (state === 'completed') {
+                    console.log(`✅ Download completed: ${fullPath}`);
+                    
+                    // Show file in Explorer with highlight
+                    this.showFileInExplorer(fullPath);
+                    
+                    // Notify user
+                    if (this.mainWindow) {
+                        this.mainWindow.webContents.send('download-completed', {
+                            sessionId: sessionId,
+                            sessionName: sessionName,
+                            fileName: fileName,
+                            filePath: fullPath
+                        });
+                    }
+                } else if (state === 'cancelled') {
+                    console.log(`❌ Download cancelled: ${fileName}`);
+                } else if (state === 'interrupted') {
+                    console.log(`⚠️ Download interrupted: ${fileName}`);
+                }
+            });
+            
+            // Handle download progress (optional)
+            item.on('updated', (event, state) => {
+                if (state === 'progressing') {
+                    if (item.isPaused()) {
+                        console.log(`⏸️ Download paused: ${fileName}`);
+                    } else {
+                        const progress = Math.round((item.getReceivedBytes() / item.getTotalBytes()) * 100);
+                        if (progress % 25 === 0) { // Log every 25%
+                            console.log(`📥 Download progress: ${fileName} - ${progress}%`);
+                        }
+                    }
+                }
+            });
+        });
+
         // Handle page title updates
         view.webContents.on('page-title-updated', (event, title) => {
             console.log(`📄 Page title updated for session ${sessionId}: ${title}`);
@@ -493,6 +686,39 @@ class MultiBrowserApp {
         return 0; // No unread messages found
     }
 
+    // Function to show file in Windows Explorer with highlight
+    showFileInExplorer(filePath) {
+        try {
+            // Verify file exists before trying to show it
+            if (!require('fs').existsSync(filePath)) {
+                console.warn(`File does not exist: ${filePath}`);
+                return;
+            }
+
+            // Use Windows shell command to show file in Explorer
+            // /select flag highlights the specific file
+            const { spawn } = require('child_process');
+            const process = spawn('explorer', ['/select,', filePath], { 
+                detached: true,
+                stdio: 'ignore'
+            });
+            
+            process.unref(); // Allow the parent process to exit independently
+            console.log(`📂 Opened Explorer for: ${filePath}`);
+        } catch (error) {
+            console.error('Error opening Explorer:', error);
+            
+            // Fallback: just open the directory
+            try {
+                const dirPath = require('path').dirname(filePath);
+                shell.openPath(dirPath);
+                console.log(`📂 Opened directory as fallback: ${dirPath}`);
+            } catch (fallbackError) {
+                console.error('Fallback also failed:', fallbackError);
+            }
+        }
+    }
+
     cleanup() {
         // Clean up browser views
         for (const [sessionId, view] of this.browserViews) {
@@ -503,6 +729,17 @@ class MultiBrowserApp {
             }
         }
         this.browserViews.clear();
+        
+        // Clean up active notifications
+        for (const [sessionId, notification] of this.activeNotifications) {
+            try {
+                notification.close();
+            } catch (error) {
+                console.log(`Could not close notification for session ${sessionId}`);
+            }
+        }
+        this.activeNotifications.clear();
+        
         console.log('Cleaning up Multi Browser Manager...');
     }
 }

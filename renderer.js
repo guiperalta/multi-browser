@@ -45,14 +45,53 @@ class MultiBrowserUI {
         });
 
         // Focus a specific session when a system notification is clicked
-        ipcRenderer.on('focus-session', async (_e, { sessionId }) => {
-            if (!sessionId) return;
+        ipcRenderer.on('focus-session', async (_e, { sessionId, source }) => {
+            console.log(`🎯 Focus session request received: ${sessionId} (source: ${source || 'unknown'})`);
+            
+            if (!sessionId) {
+                console.warn('No sessionId provided for focus-session');
+                return;
+            }
+            
             try {
-                await this.openSessionTab(sessionId);
-                await this.switchToTab(sessionId);
+                // Check if session exists
+                const sessionData = this.sessions.get(sessionId);
+                if (!sessionData) {
+                    console.warn(`Session ${sessionId} not found in active sessions`);
+                    // Try to load sessions first
+                    await this.loadSessions();
+                }
+                
+                // Check if the tab is already open
+                if (this.activeTabs.has(sessionId)) {
+                    console.log(`📑 Session ${sessionId} tab already open, switching to it`);
+                    await this.switchToTab(sessionId);
+                } else {
+                    console.log(`📑 Opening new tab for session ${sessionId}`);
+                    await this.openSessionTab(sessionId);
+                    await this.switchToTab(sessionId);
+                }
+                
+                // Show a brief notification that we switched to the session
+                const sessionName = this.originalSessionNames.get(sessionId) || sessionData?.name || 'Unknown Session';
+                this.showNotification(`Switched to: ${sessionName}`, 'info');
+                
+                console.log(`✅ Successfully focused session ${sessionId}`);
+                
             } catch (err) {
                 console.error('Failed to focus session from notification click:', err);
+                this.showNotification('Failed to switch to session', 'error');
             }
+        });
+
+        // Handle download completion notifications
+        ipcRenderer.on('download-completed', (event, { sessionId, sessionName, fileName, filePath }) => {
+            console.log(`📥 Download completed in session ${sessionId} (${sessionName}): ${fileName}`);
+            const message = `File downloaded: ${fileName}`;
+            this.showNotification(message, 'success');
+            
+            // Also log the full path for debugging
+            console.log(`📂 File saved to: ${filePath}`);
         });
     }
 
