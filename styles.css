@@ -24,7 +24,7 @@ body {
 }
 
 .session-item {
-    background: rgba(255,255,255,0.1);
+    background: rgba(255, 255, 255, 0.1);
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 10px;
@@ -34,12 +34,12 @@ body {
 }
 
 .session-item:hover {
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.2);
     border-left-color: white;
 }
 
 .session-item.active {
-    background: rgba(255,255,255,0.25);
+    background: rgba(255, 255, 255, 0.25);
     border-left-color: #fff;
 }
 
@@ -216,7 +216,7 @@ body {
     color: #333;
 }
 
-.welcome-screen > p {
+.welcome-screen>p {
     font-size: 1.2rem;
     color: #666;
     margin-bottom: 40px;
@@ -239,7 +239,7 @@ body {
     padding: 20px;
     background: white;
     border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .feature h3 {
@@ -303,11 +303,12 @@ body {
     left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
-    background: rgba(0,0,0,0.8) !important;
+    background: rgba(0, 0, 0, 0.8) !important;
     display: none;
     justify-content: center;
     align-items: center;
-    z-index: 2147483647 !important; /* Maximum z-index value */
+    z-index: 2147483647 !important;
+    /* Maximum z-index value */
     pointer-events: auto !important;
 }
 
@@ -324,9 +325,10 @@ body {
     border-radius: 12px;
     width: 90%;
     max-width: 500px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     position: relative !important;
-    z-index: 2147483647 !important; /* Maximum z-index value */
+    z-index: 2147483647 !important;
+    /* Maximum z-index value */
     pointer-events: all !important;
 }
 
@@ -427,13 +429,13 @@ body {
 .loading {
     text-align: center;
     padding: 40px 20px;
-    color: rgba(255,255,255,0.7);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .empty-state {
     text-align: center;
     padding: 40px 20px;
-    color: rgba(255,255,255,0.7);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .empty-state h3 {
@@ -451,8 +453,9 @@ body {
     font-weight: 600;
     transform: translateX(400px);
     transition: transform 0.3s ease;
-    z-index: 2147483646 !important; /* Just below modal */
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 2147483646 !important;
+    /* Just below modal */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     pointer-events: all !important;
 }
 
@@ -477,12 +480,12 @@ body {
 /* Welcome Tab Sessions */
 .welcome-sessions-section {
     margin: 40px 0;
-    background: rgba(255,255,255,0.15);
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 16px;
     padding: 32px;
     backdrop-filter: blur(15px);
-    border: 1px solid rgba(255,255,255,0.2);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     max-height: 60vh;
     overflow-y: auto;
 }
@@ -503,15 +506,15 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     transition: all 0.3s ease;
 }
 
 .welcome-session-item:hover {
     background: #fff;
-    border-color: rgba(0,0,0,0.12);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     transform: translateY(-2px);
 }
 
@@ -615,15 +618,15 @@ body {
 }
 
 /* Responsive */
-@media (max-width: 768px) {    
+@media (max-width: 768px) {
     .welcome-screen {
         padding: 40px 20px;
     }
-    
+
     .welcome-screen h2 {
         font-size: 2rem;
     }
-    
+
     .features {
         grid-template-columns: 1fr;
     }
@@ -644,4 +647,39 @@ body {
         padding: 20px;
         margin: 20px 0;
     }
+}
+
+/* Status Bar */
+.status-bar {
+    height: 0;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 12px;
+    color: #666;
+    position: relative;
+    z-index: 1000;
+    overflow: hidden;
+    transition: height 0.3s ease;
+}
+
+.status-bar.show {
+    height: 30px;
+}
+
+.status-bar.success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-bar.error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.status-bar.info {
+    background: #d1ecf1;
+    color: #0c5460;
 }

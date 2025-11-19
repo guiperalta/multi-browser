@@ -641,19 +641,30 @@ class MultiBrowserUI {
                 this.showNotification(`Error deleting session: ${result.error} `, 'error');
             }
         } catch (error) {
-            this.showNotification(`Error: ${error.message} `, 'error');
+            this.showNotification(`Error: ${error.message}`, 'error');
         }
     }
 
     showNotification(message, type = 'info') {
-        const notification = document.getElementById('notification');
-        notification.textContent = message;
-        notification.className = `notification ${type} `;
-        notification.classList.add('show');
+        const statusBar = document.getElementById('status-bar');
+        const statusMessage = document.getElementById('status-message');
 
-        setTimeout(() => {
-            notification.classList.remove('show');
-        }, 3000);
+        if (statusBar && statusMessage) {
+            // Show the message
+            statusMessage.textContent = message;
+            statusBar.className = `status-bar show ${type}`;
+
+            // After 3 seconds, show "Ready" for 2 seconds, then hide
+            setTimeout(() => {
+                statusBar.className = 'status-bar show';
+                statusMessage.textContent = 'Ready';
+
+                // Hide after 2 more seconds
+                setTimeout(() => {
+                    statusBar.className = 'status-bar';
+                }, 2000);
+            }, 3000);
+        }
     }
 
     formatDate(dateString) {

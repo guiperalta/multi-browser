@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi Browser Manager</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Main content area with tabs and browser views -->
@@ -29,7 +31,7 @@
                     <div class="welcome-screen">
                         <h2>Welcome to Multi Browser Manager</h2>
                         <p>Create and manage multiple isolated browser sessions in one window.</p>
-                        
+
                         <div class="quick-actions">
                             <button class="btn btn-primary" id="createFirstSession">
                                 🚀 Create Your First Session
@@ -64,6 +66,11 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Status Bar -->
+            <div id="status-bar" class="status-bar">
+                <span id="status-message">Ready</span>
+            </div>
         </div>
     </div>
 
@@ -91,9 +98,6 @@
         </div>
     </div>
 
-    <div id="notification" class="notification"></div>
-
-
     <!-- Rename Modal -->
     <div id="renameModal" class="modal">
         <div class="modal-content">
@@ -116,4 +120,5 @@
 
     <script src="renderer.js"></script>
 </body>
+
 </html>

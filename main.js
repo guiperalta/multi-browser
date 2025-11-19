@@ -439,12 +439,13 @@ class MultiBrowserApp {
             // Set bounds to content area with more conservative positioning
             const bounds = this.mainWindow.getContentBounds();
             const tabBarHeight = 45; // Ensure tab bar is not covered
+            const statusBarHeight = 30; // Ensure status bar is not covered
 
             view.setBounds({
                 x: 0,
                 y: tabBarHeight,
                 width: bounds.width,
-                height: bounds.height - tabBarHeight
+                height: bounds.height - tabBarHeight - statusBarHeight
             });
 
             // Ensure the view is visible but not intercepting all events
