@@ -31,11 +31,11 @@ class MultiBrowserApp {
             // Ensure proper Windows notification activation routing
             try {
                 app.setAppUserModelId('com.multibrowser.app');
-            } catch {}
-            
+            } catch { }
+
             // Check and log notification support
             console.log('🔔 Notification support:', Notification.isSupported());
-            
+
             console.log('Electron version:', process.versions.electron);
             console.log('Chrome/Chromium version:', process.versions.chrome);
             console.log('Node version:', process.versions.node);
@@ -71,44 +71,44 @@ class MultiBrowserApp {
         ipcMain.on('show-native-notification', (event, payload) => {
             const sessionId = this.getSessionIdByWebContents(event.sender);
             const { title, options, url } = payload || {};
-            
+
             console.log(`🔔 Creating native notification for session ${sessionId}: "${title}"`);
             console.log(`🔔 Notification options:`, options);
             console.log(`🔔 URL: ${url}`);
-            
+
             try {
                 const body = options?.body || '';
-                const notification = new Notification({ 
-                    title, 
-                    body, 
+                const notification = new Notification({
+                    title,
+                    body,
                     silent: options?.silent === true,
                     icon: path.join(__dirname, 'assets', 'icon.png') // Add app icon to notification
                 });
-                
+
                 // Handle notification click
                 notification.on('click', () => {
                     console.log(`🔔 REAL NOTIFICATION CLICKED for session ${sessionId}`);
                     console.log(`🔔 Will focus session: ${sessionId}`);
                     this.handleNotificationClick(sessionId);
-                    
+
                     // Remove this notification from active notifications
                     this.activeNotifications.delete(sessionId);
                 });
-                
+
                 // Handle notification close
                 notification.on('close', () => {
                     console.log(`🔔 REAL NOTIFICATION CLOSED for session ${sessionId}`);
                     // Remove this notification from active notifications
                     this.activeNotifications.delete(sessionId);
                 });
-                
+
                 // Store the notification for this session
                 this.activeNotifications.set(sessionId, notification);
-                
+
                 notification.show();
-                
+
                 console.log(`🔔 REAL notification shown and tracked for session ${sessionId}`);
-                
+
             } catch (err) {
                 console.error('Failed to show native notification:', err);
             }
@@ -118,40 +118,40 @@ class MultiBrowserApp {
     // Test notification functionality
     testNotification() {
         console.log('🧪 Creating test notification...');
-        
+
         try {
             // Get first available session for testing
             const firstSessionId = Array.from(this.browserViews.keys())[0];
-            
+
             if (!firstSessionId) {
                 console.log('🧪 No active sessions found for testing');
                 return;
             }
-            
+
             // Use the same Notification constructor that works in the show-native-notification handler
             const { Notification } = require('electron');
-            const notification = new Notification({ 
-                title: 'Test Notification', 
+            const notification = new Notification({
+                title: 'Test Notification',
                 body: `Click to focus session: ${firstSessionId}`,
                 icon: path.join(__dirname, 'assets', 'icon.png')
             });
-            
+
             notification.on('click', () => {
                 console.log(`🧪 Test notification clicked - focusing session ${firstSessionId}`);
                 this.handleNotificationClick(firstSessionId);
                 this.activeNotifications.delete(firstSessionId);
             });
-            
+
             notification.on('close', () => {
                 console.log('🧪 Test notification closed');
                 this.activeNotifications.delete(firstSessionId);
             });
-            
+
             this.activeNotifications.set(firstSessionId, notification);
             notification.show();
-            
+
             console.log(`🧪 Test notification created for session ${firstSessionId}`);
-            
+
         } catch (error) {
             console.error('🧪 Error creating test notification:', error);
         }
@@ -163,7 +163,7 @@ class MultiBrowserApp {
         console.log(`🎯 Session ID: ${sessionId}`);
         console.log(`🎯 Main window exists: ${!!this.mainWindow}`);
         console.log(`🎯 Main window destroyed: ${this.mainWindow ? this.mainWindow.isDestroyed() : 'N/A'}`);
-        
+
         if (!this.mainWindow) {
             console.warn('Main window not available for notification click');
             return;
@@ -174,22 +174,22 @@ class MultiBrowserApp {
             console.log(`   - Minimized: ${this.mainWindow.isMinimized()}`);
             console.log(`   - Visible: ${this.mainWindow.isVisible()}`);
             console.log(`   - Focused: ${this.mainWindow.isFocused()}`);
-            
+
             // Bring window to front and focus it
             if (this.mainWindow.isMinimized()) {
                 this.mainWindow.restore();
                 console.log('🔄 Window restored from minimized state');
             }
-            
+
             if (!this.mainWindow.isVisible()) {
                 this.mainWindow.show();
                 console.log('👁️ Window shown');
             }
-            
+
             this.mainWindow.focus();
             this.mainWindow.setAlwaysOnTop(true);
             console.log('🎯 Window focused and set to always on top');
-            
+
             // Remove always on top after a short delay to ensure focus
             setTimeout(() => {
                 if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -197,18 +197,18 @@ class MultiBrowserApp {
                     console.log('🎯 Always on top removed');
                 }
             }, 1000);
-            
+
             console.log('🎯 Window focused and brought to front');
-            
+
             // Send focus command to renderer to switch to the correct session
-            this.mainWindow.webContents.send('focus-session', { 
+            this.mainWindow.webContents.send('focus-session', {
                 sessionId,
                 source: 'notification-click'
             });
-            
+
             console.log(`📨 Sent focus-session command for ${sessionId}`);
             console.log(`🎯 ===============================================`);
-            
+
         } catch (error) {
             console.error('Error handling notification click:', error);
         }
@@ -229,15 +229,15 @@ class MultiBrowserApp {
         });
 
         this.mainWindow.loadFile('index.html');
-        
+
         // Remove menu bar for cleaner look
         this.mainWindow.setMenuBarVisibility(false);
-        
+
         // Open DevTools in development
         if (process.env.NODE_ENV === 'development') {
             this.mainWindow.webContents.openDevTools();
         }
-        
+
         // Add keyboard shortcut to test notifications (Ctrl+T)
         this.mainWindow.webContents.on('before-input-event', (event, input) => {
             if (input.control && input.key.toLowerCase() === 't' && input.type === 'keyDown') {
@@ -245,17 +245,17 @@ class MultiBrowserApp {
                 this.testNotification();
             }
         });
-        
+
         // Handle window resize to update browser view bounds
         this.mainWindow.on('resize', () => {
             if (this.activeBrowserView) {
                 const bounds = this.mainWindow.getContentBounds();
                 const tabBarHeight = 45;
-                
-                this.activeBrowserView.setBounds({ 
+
+                this.activeBrowserView.setBounds({
                     x: 0,
                     y: tabBarHeight,
-                    width: bounds.width, 
+                    width: bounds.width,
                     height: bounds.height - tabBarHeight
                 });
             }
@@ -302,12 +302,16 @@ class MultiBrowserApp {
         ipcMain.handle('rename-session', async (event, sessionId, newName) => {
             return this.renameSession(sessionId, newName);
         });
+
+        ipcMain.handle('update-session-auto-open', async (event, sessionId, autoOpen) => {
+            return this.updateSessionAutoOpen(sessionId, autoOpen);
+        });
     }
 
     async createBrowserSession(config) {
         try {
             const sessionId = config.sessionId || `session_${Date.now()}_${++this.sessionCounter}`;
-            
+
             // Create isolated session partition
             const partitionName = `persist:session-${sessionId}`;
             const sessionInstance = session.fromPartition(partitionName);
@@ -324,6 +328,7 @@ class MultiBrowserApp {
                 id: sessionId,
                 name: config.name || `Session ${this.sessionCounter}`,
                 url: config.url || 'about:blank',
+                autoOpen: false,
                 created: new Date().toISOString(),
                 lastAccessed: new Date().toISOString(),
                 partition: partitionName
@@ -351,7 +356,7 @@ class MultiBrowserApp {
         try {
             // Remove from database
             await db.delete(`/sessions/${sessionId}`);
-            
+
             // Clear the session partition data
             const partitionName = `persist:session-${sessionId}`;
             try {
@@ -396,10 +401,10 @@ class MultiBrowserApp {
             });
 
             this.browserViews.set(sessionId, view);
-            
+
             // Set up event handlers for the browser view
             this.setupBrowserViewEvents(view, sessionId, sessionData.name);
-            
+
             // Configurar User Agent do Chrome para compatibilidade com WhatsApp Web
             const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
             view.webContents.setUserAgent(chromeUserAgent);
@@ -434,11 +439,11 @@ class MultiBrowserApp {
             // Set bounds to content area with more conservative positioning
             const bounds = this.mainWindow.getContentBounds();
             const tabBarHeight = 45; // Ensure tab bar is not covered
-            
-            view.setBounds({ 
+
+            view.setBounds({
                 x: 0,
                 y: tabBarHeight,
-                width: bounds.width, 
+                width: bounds.width,
                 height: bounds.height - tabBarHeight
             });
 
@@ -489,7 +494,7 @@ class MultiBrowserApp {
                 // Configurar User Agent antes de navegar
                 const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
                 view.webContents.setUserAgent(chromeUserAgent);
-                
+
                 view.webContents.loadURL(url);
                 return { success: true };
             }
@@ -499,18 +504,34 @@ class MultiBrowserApp {
         }
     }
 
+
     async renameSession(sessionId, newName) {
         try {
             const sessionData = await db.getData(`/sessions/${sessionId}`);
             sessionData.name = newName;
             sessionData.lastAccessed = new Date().toISOString();
-            
+
             await db.push(`/sessions/${sessionId}`, sessionData);
-            
+
             console.log(`📝 Session ${sessionId} renamed to: ${newName}`);
             return { success: true, sessionData };
         } catch (error) {
             console.error('Error renaming session:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async updateSessionAutoOpen(sessionId, autoOpen) {
+        try {
+            const sessionData = await db.getData(`/sessions/${sessionId}`);
+            sessionData.autoOpen = autoOpen;
+
+            await db.push(`/sessions/${sessionId}`, sessionData);
+
+            console.log(`📝 Session ${sessionId} auto-open set to: ${autoOpen}`);
+            return { success: true, sessionData };
+        } catch (error) {
+            console.error('Error updating session auto-open:', error);
             return { success: false, error: error.message };
         }
     }
@@ -520,18 +541,18 @@ class MultiBrowserApp {
         view.webContents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
             console.log(`🔗 New window requested: ${url}`);
             console.log(`🔗 Disposition: ${disposition}`);
-            
+
             // Open external links in system browser
             if (disposition === 'new-window' || disposition === 'foreground-tab' || disposition === 'background-tab') {
                 console.log(`🌐 Opening ${url} in system browser`);
                 shell.openExternal(url);
-                
+
                 // Notify user that link opened externally
                 this.mainWindow.webContents.send('external-link-opened', { url });
-                
+
                 return { action: 'deny' }; // Prevent opening in app
             }
-            
+
             // For other cases, allow opening in app
             return { action: 'allow' };
         });
@@ -545,10 +566,10 @@ class MultiBrowserApp {
         // Handle external protocol requests (like mailto:, tel:, etc.)
         view.webContents.on('will-redirect', (event, redirectUrl) => {
             console.log(`🔄 Redirect to: ${redirectUrl}`);
-            
+
             // Check if it's an external protocol
-            if (redirectUrl.startsWith('mailto:') || 
-                redirectUrl.startsWith('tel:') || 
+            if (redirectUrl.startsWith('mailto:') ||
+                redirectUrl.startsWith('tel:') ||
                 redirectUrl.startsWith('sms:') ||
                 redirectUrl.startsWith('skype:')) {
                 event.preventDefault();
@@ -562,13 +583,13 @@ class MultiBrowserApp {
             console.log(`📥 Download started: ${item.getFilename()}`);
             console.log(`📥 Original URL: ${item.getURL()}`);
             console.log(`📥 File size: ${item.getTotalBytes()} bytes`);
-            
+
             // Set download path to user's Downloads folder
             const os = require('os');
             const downloadsPath = path.join(os.homedir(), 'Downloads');
             const fileName = item.getFilename();
             const fullPath = path.join(downloadsPath, fileName);
-            
+
             // Ensure Downloads directory exists
             try {
                 if (!require('fs').existsSync(downloadsPath)) {
@@ -577,18 +598,18 @@ class MultiBrowserApp {
             } catch (dirError) {
                 console.error('Error creating downloads directory:', dirError);
             }
-            
+
             item.setSavePath(fullPath);
             console.log(`📥 Download will be saved to: ${fullPath}`);
-            
+
             // Handle download completion
             item.once('done', (event, state) => {
                 if (state === 'completed') {
                     console.log(`✅ Download completed: ${fullPath}`);
-                    
+
                     // Show file in Explorer with highlight
                     this.showFileInExplorer(fullPath);
-                    
+
                     // Notify user
                     if (this.mainWindow) {
                         this.mainWindow.webContents.send('download-completed', {
@@ -604,7 +625,7 @@ class MultiBrowserApp {
                     console.log(`⚠️ Download interrupted: ${fileName}`);
                 }
             });
-            
+
             // Handle download progress (optional)
             item.on('updated', (event, state) => {
                 if (state === 'progressing') {
@@ -623,15 +644,15 @@ class MultiBrowserApp {
         // Handle page title updates
         view.webContents.on('page-title-updated', (event, title) => {
             console.log(`📄 Page title updated for session ${sessionId}: ${title}`);
-            
+
             // Extract unread message count from title
             const unreadCount = this.extractUnreadCount(title);
-            
+
             // Send title update to renderer with unread count
-            this.mainWindow.webContents.send('page-title-updated', { 
-                sessionId, 
-                title, 
-                unreadCount 
+            this.mainWindow.webContents.send('page-title-updated', {
+                sessionId,
+                title,
+                unreadCount
             });
         });
 
@@ -662,27 +683,27 @@ class MultiBrowserApp {
     // Function to extract unread message count from page title
     extractUnreadCount(title) {
         if (!title) return 0;
-        
+
         // WhatsApp Web patterns:
         // "(5) WhatsApp" - 5 unread messages
         // "WhatsApp" - no unread messages
         // "(99+) WhatsApp" - 99+ unread messages
-        
+
         // Look for pattern like "(number)" or "(number+)" at the beginning
         const match = title.match(/^\((\d+\+?)\)/);
-        
+
         if (match) {
             const count = match[1];
             // Return the count as string to preserve "+" if present
             return count;
         }
-        
+
         // Also check for other common patterns like "5 WhatsApp" or "WhatsApp (5)"
         const altMatch = title.match(/(\d+\+?)\s+\w+/) || title.match(/\w+\s+\((\d+\+?)\)/);
         if (altMatch) {
             return altMatch[1];
         }
-        
+
         return 0; // No unread messages found
     }
 
@@ -698,16 +719,16 @@ class MultiBrowserApp {
             // Use Windows shell command to show file in Explorer
             // /select flag highlights the specific file
             const { spawn } = require('child_process');
-            const process = spawn('explorer', ['/select,', filePath], { 
+            const process = spawn('explorer', ['/select,', filePath], {
                 detached: true,
                 stdio: 'ignore'
             });
-            
+
             process.unref(); // Allow the parent process to exit independently
             console.log(`📂 Opened Explorer for: ${filePath}`);
         } catch (error) {
             console.error('Error opening Explorer:', error);
-            
+
             // Fallback: just open the directory
             try {
                 const dirPath = require('path').dirname(filePath);
@@ -729,7 +750,7 @@ class MultiBrowserApp {
             }
         }
         this.browserViews.clear();
-        
+
         // Clean up active notifications
         for (const [sessionId, notification] of this.activeNotifications) {
             try {
@@ -739,7 +760,7 @@ class MultiBrowserApp {
             }
         }
         this.activeNotifications.clear();
-        
+
         console.log('Cleaning up Multi Browser Manager...');
     }
 }
