@@ -1,7 +1,50 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
+
+// Get icon path - ensure absolute path for better reliability
+function getIconPath() {
+    // Try app.getAppPath() first (works in packaged apps)
+    let iconPath;
+    try {
+        iconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
+        if (fs.existsSync(iconPath)) {
+            return path.resolve(iconPath);
+        }
+    } catch (e) {
+        // app.getAppPath() might not be available yet
+    }
+    
+    // Fallback to __dirname (works in development)
+    iconPath = path.join(__dirname, 'assets', 'icon.png');
+    if (fs.existsSync(iconPath)) {
+        return path.resolve(iconPath);
+    }
+    
+    // If icon doesn't exist, return undefined (Electron will use default)
+    console.warn('⚠️ Icon not found at:', iconPath);
+    return undefined;
+}
+
+// Get icon as nativeImage for better Linux support
+function getIconNativeImage() {
+    const iconPath = getIconPath();
+    if (!iconPath) {
+        return undefined;
+    }
+    try {
+        const icon = nativeImage.createFromPath(iconPath);
+        if (icon.isEmpty()) {
+            console.warn('⚠️ Icon image is empty');
+            return undefined;
+        }
+        return icon;
+    } catch (error) {
+        console.error('⚠️ Error loading icon:', error);
+        return undefined;
+    }
+}
 
 // Initialize database for storing sessions
 const db = new JsonDB(new Config("sessions", true, false, '/'));
@@ -13,6 +56,7 @@ class MultiBrowserApp {
         this.browserViews = new Map(); // sessionId -> WebContentsView
         this.activeBrowserView = null;
         this.activeNotifications = new Map(); // sessionId -> notification objects
+        this.recentlyOpenedFolders = new Set(); // Track folders that were recently opened
         this.init();
     }
 
@@ -32,6 +76,29 @@ class MultiBrowserApp {
             try {
                 app.setAppUserModelId('com.multibrowser.app');
             } catch { }
+
+            // Set app icon (important for Linux taskbar/dock)
+            const icon = getIconNativeImage();
+            const iconPath = getIconPath();
+            console.log('🖼️ App icon path:', iconPath);
+            
+            if (icon) {
+                console.log('✅ Icon file found and loaded as nativeImage');
+                // Set icon on app (works on Linux for taskbar/dock)
+                if (process.platform === 'linux') {
+                    // On Linux, the app icon is typically set via the window icon
+                    // but we can also try setting it here
+                    try {
+                        app.dock?.setIcon(icon); // macOS
+                    } catch (e) {
+                        // Not macOS, continue
+                    }
+                }
+            } else if (iconPath && fs.existsSync(iconPath)) {
+                console.log('✅ Icon file found at path');
+            } else {
+                console.warn('⚠️ Icon file not found, using default Electron icon');
+            }
 
             // Check and log notification support
             console.log('🔔 Notification support:', Notification.isSupported());
@@ -82,7 +149,7 @@ class MultiBrowserApp {
                     title,
                     body,
                     silent: options?.silent === true,
-                    icon: path.join(__dirname, 'assets', 'icon.png') // Add app icon to notification
+                    icon: getIconPath() // Add app icon to notification
                 });
 
                 // Handle notification click
@@ -133,7 +200,7 @@ class MultiBrowserApp {
             const notification = new Notification({
                 title: 'Test Notification',
                 body: `Click to focus session: ${firstSessionId}`,
-                icon: path.join(__dirname, 'assets', 'icon.png')
+                icon: getIconPath()
             });
 
             notification.on('click', () => {
@@ -215,6 +282,19 @@ class MultiBrowserApp {
     }
 
     createMainWindow() {
+        // Get icon as nativeImage for better cross-platform support
+        const icon = getIconNativeImage();
+        const iconPath = getIconPath();
+        
+        if (icon) {
+            console.log('✅ Using nativeImage icon:', iconPath);
+            // Log icon size for debugging
+            const size = icon.getSize();
+            console.log(`📐 Icon size: ${size.width}x${size.height}`);
+        } else {
+            console.warn('⚠️ Using default icon');
+        }
+
         this.mainWindow = new BrowserWindow({
             width: 1200,
             height: 800,
@@ -224,11 +304,23 @@ class MultiBrowserApp {
                 webSecurity: false,
                 webviewTag: true // Enable webview tag
             },
-            icon: path.join(__dirname, 'assets', 'icon.png'),
-            title: 'Multi Browser Manager'
+            icon: icon || iconPath, // Use nativeImage if available, fallback to path
+            title: 'Multi Browser Manager',
+            show: false // Don't show until ready
         });
 
+        // Set icon explicitly (important for Linux)
+        if (icon) {
+            this.mainWindow.setIcon(icon);
+            console.log('🖼️ Icon set explicitly on window');
+        }
+
         this.mainWindow.loadFile('index.html');
+        
+        // Show window after icon is set
+        this.mainWindow.once('ready-to-show', () => {
+            this.mainWindow.show();
+        });
 
         // Remove menu bar for cleaner look
         this.mainWindow.setMenuBarVisibility(false);
@@ -589,17 +681,19 @@ class MultiBrowserApp {
             const os = require('os');
             const downloadsPath = path.join(os.homedir(), 'Downloads');
             const fileName = item.getFilename();
-            const fullPath = path.join(downloadsPath, fileName);
 
             // Ensure Downloads directory exists
             try {
-                if (!require('fs').existsSync(downloadsPath)) {
-                    require('fs').mkdirSync(downloadsPath, { recursive: true });
+                if (!fs.existsSync(downloadsPath)) {
+                    fs.mkdirSync(downloadsPath, { recursive: true });
                 }
             } catch (dirError) {
                 console.error('Error creating downloads directory:', dirError);
             }
 
+            // Get a unique filename if the file already exists
+            const fullPath = this.getUniqueFilePath(downloadsPath, fileName);
+            const finalFileName = path.basename(fullPath);
             item.setSavePath(fullPath);
             console.log(`📥 Download will be saved to: ${fullPath}`);
 
@@ -616,7 +710,7 @@ class MultiBrowserApp {
                         this.mainWindow.webContents.send('download-completed', {
                             sessionId: sessionId,
                             sessionName: sessionName,
-                            fileName: fileName,
+                            fileName: finalFileName,
                             filePath: fullPath
                         });
                     }
@@ -708,33 +802,135 @@ class MultiBrowserApp {
         return 0; // No unread messages found
     }
 
-    // Function to show file in Windows Explorer with highlight
+    // Function to get a unique file path by appending (1), (2), etc. if file exists
+    getUniqueFilePath(directory, fileName) {
+        const filePath = path.join(directory, fileName);
+        
+        // If file doesn't exist, return the original path
+        if (!fs.existsSync(filePath)) {
+            return filePath;
+        }
+
+        // Parse filename and extension
+        const ext = path.extname(fileName);
+        const baseName = path.basename(fileName, ext);
+        
+        // Try appending (1), (2), etc. until we find a unique name
+        let counter = 1;
+        let newFileName;
+        let newFilePath;
+        
+        do {
+            newFileName = `${baseName} (${counter})${ext}`;
+            newFilePath = path.join(directory, newFileName);
+            counter++;
+        } while (fs.existsSync(newFilePath));
+        
+        console.log(`📁 File already exists, using: ${newFileName}`);
+        return newFilePath;
+    }
+
+    // Function to show file in file manager (cross-platform) with file highlighting
     showFileInExplorer(filePath) {
         try {
             // Verify file exists before trying to show it
-            if (!require('fs').existsSync(filePath)) {
+            if (!fs.existsSync(filePath)) {
                 console.warn(`File does not exist: ${filePath}`);
                 return;
             }
 
-            // Use Windows shell command to show file in Explorer
-            // /select flag highlights the specific file
+            // Get the directory path
+            const dirPath = path.dirname(filePath);
+            
+            // Check if we've recently opened this folder (within last 2 seconds)
+            // This prevents re-opening if a file manager is already open
+            if (this.recentlyOpenedFolders.has(dirPath)) {
+                console.log(`📂 Folder already opened recently, skipping: ${dirPath}`);
+                return;
+            }
+
             const { spawn } = require('child_process');
-            const process = spawn('explorer', ['/select,', filePath], {
-                detached: true,
-                stdio: 'ignore'
-            });
+            const platform = process.platform;
 
-            process.unref(); // Allow the parent process to exit independently
-            console.log(`📂 Opened Explorer for: ${filePath}`);
+            // Use platform-specific commands to ensure file is highlighted
+            if (platform === 'win32') {
+                // Windows: Use explorer with /select to highlight the file
+                const proc = spawn('explorer', ['/select,', filePath], {
+                    detached: true,
+                    stdio: 'ignore'
+                });
+                proc.unref();
+                console.log(`📂 Opened Explorer with file highlighted: ${filePath}`);
+            } else if (platform === 'darwin') {
+                // macOS: Use open -R to reveal and highlight the file
+                const proc = spawn('open', ['-R', filePath], {
+                    detached: true,
+                    stdio: 'ignore'
+                });
+                proc.unref();
+                console.log(`📂 Opened Finder with file highlighted: ${filePath}`);
+            } else {
+                // Linux: Try file manager-specific commands for highlighting
+                // Try common file managers with --select flag
+                const fileManagers = [
+                    { cmd: 'nautilus', args: ['--select', filePath] },      // GNOME
+                    { cmd: 'dolphin', args: ['--select', filePath] },      // KDE
+                    { cmd: 'thunar', args: ['--select', filePath] },       // XFCE
+                    { cmd: 'pcmanfm', args: ['--select', filePath] },      // LXDE
+                    { cmd: 'nemo', args: ['--select', filePath] }           // Cinnamon
+                ];
+
+                // Try each file manager sequentially
+                let opened = false;
+                for (const fm of fileManagers) {
+                    try {
+                        const proc = spawn(fm.cmd, fm.args, {
+                            detached: true,
+                            stdio: 'ignore'
+                        });
+                        
+                        // Check if process started successfully
+                        proc.on('error', (err) => {
+                            // File manager not found, will try next one
+                            if (!opened) {
+                                // Only log if we haven't opened one yet
+                            }
+                        });
+                        
+                        // If no immediate error, assume it worked
+                        // (spawn doesn't wait for process to actually start)
+                        proc.unref();
+                        opened = true;
+                        console.log(`📂 Opened ${fm.cmd} with file highlighted: ${filePath}`);
+                        break;
+                    } catch (e) {
+                        // Continue to next file manager if spawn fails
+                        continue;
+                    }
+                }
+
+                // Fallback to Electron's API if no specific file manager worked
+                // shell.showItemInFolder should highlight on most Linux systems
+                if (!opened) {
+                    shell.showItemInFolder(filePath);
+                    console.log(`📂 Opened file manager (fallback) for: ${filePath}`);
+                }
+            }
+            
+            // Track that we opened this folder
+            this.recentlyOpenedFolders.add(dirPath);
+            
+            // Remove from tracking after 2 seconds to allow reopening if needed
+            setTimeout(() => {
+                this.recentlyOpenedFolders.delete(dirPath);
+            }, 2000);
         } catch (error) {
-            console.error('Error opening Explorer:', error);
+            console.error('Error opening file manager:', error);
 
-            // Fallback: just open the directory
+            // Fallback: use Electron's API
             try {
-                const dirPath = require('path').dirname(filePath);
-                shell.openPath(dirPath);
-                console.log(`📂 Opened directory as fallback: ${dirPath}`);
+                shell.showItemInFolder(filePath);
+                console.log(`📂 Opened file manager (fallback) for: ${filePath}`);
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
             }

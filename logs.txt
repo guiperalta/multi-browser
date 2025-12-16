@@ -1,0 +1,31 @@
+
+> multi-browser@1.0.0 dev
+> electron . --dev
+
+🔔 Notification support: true
+Electron version: 37.2.6
+Chrome/Chromium version: 138.0.7204.185
+Node version: 22.17.1
+🔧 [main] showBrowserView called for session_1765570654218_1
+🔧 [main] hideBrowserView called for session_1765570654218_1
+🔧 [main] showBrowserView called for session_1754664639721_1
+📄 Page title updated for session session_1754664639721_1: WhatsApp Web
+📄 Page title updated for session session_1765570654218_1: Telegram Web
+🧭 Navigation to: https://web.telegram.org/k/
+📄 Page title updated for session session_1765570654218_1: Telegram Web
+📄 Page title updated for session session_1754664639721_1: WhatsApp
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1765570654218_1: https://web.telegram.org/k/assets/img/android-chrome-192x192.png?v=jw3mK7G9Ry
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+📄 Page title updated for session session_1754664639721_1: (29) WhatsApp
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+📄 Page title updated for session session_1754664639721_1: (30) WhatsApp
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+📄 Page title updated for session session_1754664639721_1: (29) WhatsApp
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+🎯 Favicon updated for session session_1754664639721_1: https://static.whatsapp.net/rsrc.php/v4/yP/r/rYZqPCBaG70.png
+Cleaning up Multi Browser Manager...
