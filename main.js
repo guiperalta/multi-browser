@@ -339,19 +339,25 @@ class MultiBrowserApp {
         });
 
         // Handle window resize to update browser view bounds
-        this.mainWindow.on('resize', () => {
+        const updateBrowserViewBounds = () => {
             if (this.activeBrowserView) {
                 const bounds = this.mainWindow.getContentBounds();
                 const tabBarHeight = 45;
+                const statusBarHeight = 30;
 
                 this.activeBrowserView.setBounds({
                     x: 0,
                     y: tabBarHeight,
                     width: bounds.width,
-                    height: bounds.height - tabBarHeight
+                    height: bounds.height - tabBarHeight - statusBarHeight
                 });
             }
-        });
+        };
+
+        this.mainWindow.on('resize', updateBrowserViewBounds);
+        this.mainWindow.on('maximize', updateBrowserViewBounds);
+        this.mainWindow.on('unmaximize', updateBrowserViewBounds);
+        this.mainWindow.on('restore', updateBrowserViewBounds);
     }
 
     setupIPC() {
