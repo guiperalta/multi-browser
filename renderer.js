@@ -152,6 +152,9 @@ class MultiBrowserUI {
 
         // Setup rename modal
         this.setupRenameModal();
+
+        // AI Settings modal
+        this.setupAISettingsModal();
     }
 
     async showCreateSessionModal() {
@@ -1035,6 +1038,128 @@ class MultiBrowserUI {
             }
         } catch (error) {
             this.showNotification(`Error: ${error.message} `, 'error');
+        }
+    }
+
+    // ── AI Settings Modal ──
+
+    setupAISettingsModal() {
+        const modal = document.getElementById('aiSettingsModal');
+        const openBtn = document.getElementById('openAISettings');
+        const closeBtn = document.getElementById('closeAISettings');
+        const cancelBtn = document.getElementById('cancelAISettings');
+        const form = document.getElementById('aiSettingsForm');
+        const providerSelect = document.getElementById('aiProvider');
+
+        if (!modal || !openBtn) return;
+
+        openBtn.addEventListener('click', () => this.showAISettingsModal());
+        closeBtn.addEventListener('click', () => this.hideAISettingsModal());
+        cancelBtn.addEventListener('click', () => this.hideAISettingsModal());
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) this.hideAISettingsModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal.classList.contains('show')) {
+                this.hideAISettingsModal();
+            }
+        });
+
+        // Toggle API key fields based on provider
+        providerSelect.addEventListener('change', () => {
+            this.updateAIProviderFields(providerSelect.value);
+        });
+
+        form.addEventListener('submit', (e) => this.handleSaveAISettings(e));
+    }
+
+    updateAIProviderFields(provider) {
+        const claudeKeyGroup = document.getElementById('claudeApiKeyGroup');
+        const claudeModelGroup = document.getElementById('claudeModelGroup');
+        const openaiKeyGroup = document.getElementById('openaiApiKeyGroup');
+        const openaiModelGroup = document.getElementById('openaiModelGroup');
+
+        claudeKeyGroup.style.display = provider === 'claude-api' ? 'block' : 'none';
+        claudeModelGroup.style.display = provider === 'claude-api' ? 'block' : 'none';
+        openaiKeyGroup.style.display = provider === 'openai-api' ? 'block' : 'none';
+        openaiModelGroup.style.display = provider === 'openai-api' ? 'block' : 'none';
+    }
+
+    async showAISettingsModal() {
+        const modal = document.getElementById('aiSettingsModal');
+
+        // Store current tab and hide browser view
+        this.previousActiveTab = this.activeTabId;
+        if (this.activeTabId && this.activeTabId !== 'welcome') {
+            try {
+                await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+            } catch (error) {
+                console.log('Error hiding browser view:', error);
+            }
+        }
+
+        // Load current settings
+        try {
+            const settings = await ipcRenderer.invoke('ai-get-settings');
+            document.getElementById('aiProvider').value = settings.provider || 'claude-cli';
+            document.getElementById('claudeApiKey').value = settings.claudeApiKey || '';
+            document.getElementById('claudeModel').value = settings.claudeModel || 'claude-sonnet-4-6-20250514';
+            document.getElementById('openaiApiKey').value = settings.openaiApiKey || '';
+            document.getElementById('openaiModel').value = settings.openaiModel || 'gpt-4o';
+            document.getElementById('aiTargetLanguage').value = settings.targetLanguage || 'English';
+            document.getElementById('aiShortcut').value = settings.shortcut || 'Alt+H';
+            this.updateAIProviderFields(settings.provider || 'claude-cli');
+        } catch (err) {
+            console.log('Could not load AI settings:', err);
+        }
+
+        modal.classList.add('show');
+        modal.style.zIndex = '999999999';
+        modal.style.display = 'flex';
+    }
+
+    async hideAISettingsModal() {
+        const modal = document.getElementById('aiSettingsModal');
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        modal.style.zIndex = '';
+
+        // Restore browser view
+        if (this.previousActiveTab && this.previousActiveTab !== 'welcome') {
+            try {
+                await ipcRenderer.invoke('show-browser-view', this.previousActiveTab);
+            } catch (error) {
+                console.log('Error restoring browser view:', error);
+            }
+        }
+        this.previousActiveTab = null;
+    }
+
+    async handleSaveAISettings(e) {
+        e.preventDefault();
+
+        const settings = {
+            provider: document.getElementById('aiProvider').value,
+            claudeApiKey: document.getElementById('claudeApiKey').value,
+            openaiApiKey: document.getElementById('openaiApiKey').value,
+            claudeModel: document.getElementById('claudeModel').value || 'claude-sonnet-4-6-20250514',
+            openaiModel: document.getElementById('openaiModel').value || 'gpt-4o',
+            targetLanguage: document.getElementById('aiTargetLanguage').value || 'English',
+            shortcut: document.getElementById('aiShortcut').value || 'Alt+H'
+        };
+
+        try {
+            const result = await ipcRenderer.invoke('ai-save-settings', settings);
+            if (result.success) {
+                this.showNotification('AI settings saved successfully', 'success');
+                this.hideAISettingsModal();
+            } else {
+                this.showNotification(`Error saving settings: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            this.showNotification(`Error: ${error.message}`, 'error');
         }
     }
 

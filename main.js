@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, No
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
+const { createProvider } = require('./ai-provider');
 
 // Get icon path - ensure absolute path for better reliability
 function getIconPath() {
@@ -398,6 +399,19 @@ class MultiBrowserApp {
         ipcMain.handle('update-session-auto-open', async (event, sessionId, autoOpen) => {
             return this.updateSessionAutoOpen(sessionId, autoOpen);
         });
+
+        // AI Assistant IPC handlers
+        ipcMain.handle('ai-get-settings', async () => {
+            return this.getAISettings();
+        });
+
+        ipcMain.handle('ai-save-settings', async (event, settings) => {
+            return this.saveAISettings(settings);
+        });
+
+        ipcMain.handle('ai-request', async (event, { action, text }) => {
+            return this.handleAIRequest(action, text);
+        });
     }
 
     async createBrowserSession(config) {
@@ -488,7 +502,7 @@ class MultiBrowserApp {
                     nodeIntegration: false,
                     contextIsolation: true,
                     webSecurity: true,
-                    preload: path.join(__dirname, 'preload', 'notifications.js')
+                    preload: path.join(__dirname, 'preload', 'index.js')
                 }
             });
 
@@ -934,6 +948,58 @@ class MultiBrowserApp {
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
             }
+        }
+    }
+
+    // ── AI Assistant Methods ──
+
+    async getAISettings() {
+        try {
+            return await db.getData('/ai-settings');
+        } catch {
+            // Return defaults if not yet configured
+            return {
+                provider: 'claude-cli',
+                claudeApiKey: '',
+                openaiApiKey: '',
+                claudeModel: 'claude-sonnet-4-6-20250514',
+                openaiModel: 'gpt-4o',
+                targetLanguage: 'English',
+                shortcut: 'Alt+H'
+            };
+        }
+    }
+
+    async saveAISettings(settings) {
+        try {
+            await db.push('/ai-settings', settings);
+
+            // Notify all browser views about updated shortcut
+            for (const [, view] of this.browserViews) {
+                try {
+                    view.webContents.send('ai-update-shortcut', settings.shortcut);
+                } catch { }
+            }
+
+            console.log('AI settings saved');
+            return { success: true };
+        } catch (error) {
+            console.error('Error saving AI settings:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async handleAIRequest(action, text) {
+        try {
+            const settings = await this.getAISettings();
+            const provider = createProvider(settings);
+            const result = await provider.sendRequest(action, text, {
+                targetLanguage: settings.targetLanguage || 'English'
+            });
+            return { success: true, text: result };
+        } catch (error) {
+            console.error('AI request error:', error);
+            return { success: false, error: error.message };
         }
     }
 
