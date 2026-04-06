@@ -496,13 +496,17 @@ class MultiBrowserApp {
             const sessionData = await db.getData(`/sessions/${sessionId}`);
             const partitionName = sessionData.partition || `persist:session-${sessionId}`;
 
+            const preloadPath = path.join(__dirname, 'preload', 'index.js');
+            console.log('[ai] Creating browser view with preload:', preloadPath);
+
             const view = new WebContentsView({
                 webPreferences: {
                     partition: partitionName,
                     nodeIntegration: false,
                     contextIsolation: true,
+                    sandbox: false, // Required for preload require() in Electron 20+
                     webSecurity: true,
-                    preload: path.join(__dirname, 'preload', 'index.js')
+                    preload: preloadPath
                 }
             });
 
@@ -644,17 +648,28 @@ class MultiBrowserApp {
     }
 
     setupBrowserViewEvents(view, sessionId, sessionName) {
-        // Intercept AI Assistant keyboard shortcut (Alt+H) at the Electron level
-        // This is more reliable than DOM-level listeners since the page may consume events
-        view.webContents.on('before-input-event', (event, input) => {
-            if (input.type === 'keyDown' && input.alt && !input.control && !input.meta) {
-                // Use code (layout-independent) with key fallback
-                const isH = input.code === 'KeyH' || input.key.toLowerCase() === 'h';
-                if (isH) {
-                    console.log('[ai] Alt+H intercepted via before-input-event for session', sessionId);
-                    event.preventDefault();
-                    view.webContents.send('ai-toggle-toolbar');
+        // Intercept AI Assistant keyboard shortcut at the Electron level
+        // This fires before the page gets the event, so it can't be blocked
+        view.webContents.on('before-input-event', async (event, input) => {
+            if (input.type !== 'keyDown' || !input.alt || input.control || input.meta) return;
+
+            // Read configured shortcut key (default 'H')
+            let targetKey = 'h';
+            try {
+                const settings = await this.getAISettings();
+                if (settings.shortcut) {
+                    const parts = settings.shortcut.split('+');
+                    targetKey = (parts[parts.length - 1] || 'h').toLowerCase();
                 }
+            } catch { }
+
+            const codeMatch = input.code === `Key${targetKey.toUpperCase()}`;
+            const keyMatch = input.key.toLowerCase() === targetKey;
+
+            if (codeMatch || keyMatch) {
+                console.log(`[ai] Alt+${targetKey.toUpperCase()} intercepted for session ${sessionId}`);
+                event.preventDefault();
+                view.webContents.send('ai-toggle-toolbar');
             }
         });
 

@@ -1073,6 +1073,22 @@ class MultiBrowserUI {
         });
 
         form.addEventListener('submit', (e) => this.handleSaveAISettings(e));
+
+        // Key capture for shortcut field
+        const shortcutInput = document.getElementById('aiShortcut');
+        if (shortcutInput) {
+            shortcutInput.addEventListener('keydown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Only accept single letter/number/F-keys
+                let key = e.key;
+                if (key.length === 1 && /[a-zA-Z0-9]/.test(key)) {
+                    shortcutInput.value = `Alt+${key.toUpperCase()}`;
+                } else if (key.startsWith('F') && key.length <= 3) {
+                    shortcutInput.value = `Alt+${key}`;
+                }
+            });
+        }
     }
 
     updateAIProviderFields(provider) {
