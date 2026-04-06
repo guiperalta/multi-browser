@@ -9,6 +9,7 @@ const { ipcRenderer } = require('electron');
     let toolbar = null;
     let resultCard = null;
     let initialized = false;
+    let currentActionText = null; // clean text for Copy/Use (no changes explanation)
 
     // ── Register IPC listeners IMMEDIATELY (before DOM is ready) ──
     // This ensures we can receive 'ai-toggle-toolbar' from main process at any time.
@@ -355,7 +356,7 @@ const { ipcRenderer } = require('electron');
 
         // Copy button
         resultCard.querySelector('.ai-btn-copy').addEventListener('click', () => {
-            const text = resultCard.querySelector('.ai-result-body').textContent;
+            const text = currentActionText || resultCard.querySelector('.ai-result-body').textContent;
             navigator.clipboard.writeText(text).then(() => {
                 const btn = resultCard.querySelector('.ai-btn-copy');
                 btn.textContent = 'Copied!';
@@ -365,7 +366,7 @@ const { ipcRenderer } = require('electron');
 
         // Use button - paste into WhatsApp input
         resultCard.querySelector('.ai-btn-use').addEventListener('click', () => {
-            const text = resultCard.querySelector('.ai-result-body').textContent;
+            const text = currentActionText || resultCard.querySelector('.ai-result-body').textContent;
             pasteIntoInput(text);
             hideResultCard();
         });
@@ -497,11 +498,20 @@ const { ipcRenderer } = require('electron');
             const result = await ipcRenderer.invoke('ai-request', { action, text });
 
             if (result.success) {
+                if (action === 'review') {
+                    // Extract only the reviewed text (before "Changes:" line) for Copy/Use
+                    const changesMatch = result.text.match(/^([\s\S]*?)(\n+changes:[\s\S]*)$/i);
+                    currentActionText = changesMatch ? changesMatch[1].trim() : result.text;
+                } else {
+                    currentActionText = result.text;
+                }
                 showResultCard(actionLabels[action] || 'AI Result', result.text);
             } else {
+                currentActionText = null;
                 showResultError(result.error || 'An unknown error occurred.');
             }
         } catch (err) {
+            currentActionText = null;
             showResultError(`Request failed: ${err.message}`);
         }
     }
