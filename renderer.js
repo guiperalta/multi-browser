@@ -653,6 +653,7 @@ class MultiBrowserUI {
             // Show the message
             statusMessage.textContent = message;
             statusBar.className = `status-bar show ${type}`;
+            ipcRenderer.send('status-bar-visibility', true);
 
             // After 3 seconds, show "Ready" for 2 seconds, then hide
             setTimeout(() => {
@@ -662,6 +663,7 @@ class MultiBrowserUI {
                 // Hide after 2 more seconds
                 setTimeout(() => {
                     statusBar.className = 'status-bar';
+                    ipcRenderer.send('status-bar-visibility', false);
                 }, 2000);
             }, 3000);
         }
