@@ -339,22 +339,35 @@ class MultiBrowserApp {
         });
 
         // Handle window resize to update browser view bounds
-        this.mainWindow.on('resize', () => {
+        this.statusBarVisible = false;
+
+        this.updateBrowserViewBounds = () => {
             if (this.activeBrowserView) {
                 const bounds = this.mainWindow.getContentBounds();
                 const tabBarHeight = 45;
+                const statusBarHeight = this.statusBarVisible ? 30 : 0;
 
                 this.activeBrowserView.setBounds({
                     x: 0,
                     y: tabBarHeight,
                     width: bounds.width,
-                    height: bounds.height - tabBarHeight
+                    height: bounds.height - tabBarHeight - statusBarHeight
                 });
             }
-        });
+        };
+
+        this.mainWindow.on('resize', this.updateBrowserViewBounds);
+        this.mainWindow.on('maximize', this.updateBrowserViewBounds);
+        this.mainWindow.on('unmaximize', this.updateBrowserViewBounds);
+        this.mainWindow.on('restore', this.updateBrowserViewBounds);
     }
 
     setupIPC() {
+        ipcMain.on('status-bar-visibility', (event, visible) => {
+            this.statusBarVisible = visible;
+            this.updateBrowserViewBounds();
+        });
+
         ipcMain.handle('create-browser-session', async (event, config) => {
             return await this.createBrowserSession(config);
         });
@@ -528,10 +541,10 @@ class MultiBrowserApp {
             this.mainWindow.contentView.addChildView(view);
             this.activeBrowserView = view;
 
-            // Set bounds to content area with more conservative positioning
+            // Set bounds to content area
             const bounds = this.mainWindow.getContentBounds();
-            const tabBarHeight = 45; // Ensure tab bar is not covered
-            const statusBarHeight = 30; // Ensure status bar is not covered
+            const tabBarHeight = 45;
+            const statusBarHeight = this.statusBarVisible ? 30 : 0;
 
             view.setBounds({
                 x: 0,
