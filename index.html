@@ -37,6 +37,9 @@
                             <button class="btn btn-primary" id="createFirstSession">
                                 🚀 Create Session
                             </button>
+                            <button class="btn btn-secondary" id="openAISettings">
+                                &#10024; AI Settings
+                            </button>
                         </div>
 
                         <div class="welcome-sessions-section">
@@ -62,6 +65,10 @@
                             <div class="feature">
                                 <h3>🌐 Smart Link Handling</h3>
                                 <p>External links (target="_blank") open in your system browser</p>
+                            </div>
+                            <div class="feature">
+                                <h3>&#10024; AI Assistant</h3>
+                                <p>Review, translate, reply and summarize messages with AI (Alt+H)</p>
                             </div>
                         </div>
                     </div>
@@ -114,6 +121,56 @@
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelRename">Cancel</button>
                     <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI Settings Modal -->
+    <div id="aiSettingsModal" class="modal">
+        <div class="modal-content" style="max-width: 550px;">
+            <div class="modal-header">
+                <h2>&#10024; AI Settings</h2>
+                <button class="modal-close" id="closeAISettings">&times;</button>
+            </div>
+            <form id="aiSettingsForm">
+                <div class="form-group">
+                    <label for="aiProvider">AI Provider:</label>
+                    <select id="aiProvider" class="form-select">
+                        <option value="claude-cli">Claude CLI (No API key needed)</option>
+                        <option value="claude-api">Claude API</option>
+                        <option value="openai-api">OpenAI API</option>
+                    </select>
+                </div>
+                <div class="form-group ai-api-field" id="claudeApiKeyGroup" style="display:none;">
+                    <label for="claudeApiKey">Claude API Key:</label>
+                    <input type="password" id="claudeApiKey" placeholder="sk-ant-...">
+                </div>
+                <div class="form-group ai-api-field" id="claudeModelGroup" style="display:none;">
+                    <label for="claudeModel">Claude Model:</label>
+                    <input type="text" id="claudeModel" placeholder="claude-sonnet-4-6-20250514">
+                </div>
+                <div class="form-group ai-api-field" id="openaiApiKeyGroup" style="display:none;">
+                    <label for="openaiApiKey">OpenAI API Key:</label>
+                    <input type="password" id="openaiApiKey" placeholder="sk-...">
+                </div>
+                <div class="form-group ai-api-field" id="openaiModelGroup" style="display:none;">
+                    <label for="openaiModel">OpenAI Model:</label>
+                    <input type="text" id="openaiModel" placeholder="gpt-4o">
+                </div>
+                <div class="form-group">
+                    <label for="aiTargetLanguage">Default Translation Language:</label>
+                    <input type="text" id="aiTargetLanguage" placeholder="English">
+                </div>
+                <div class="form-group">
+                    <label for="aiShortcut">Keyboard Shortcut:</label>
+                    <input type="text" id="aiShortcut" placeholder="Alt+H" readonly
+                        style="cursor:pointer; caret-color:transparent;">
+                    <small style="color:#888; display:block; margin-top:4px;">Click the field and press a key (will be combined with Alt)</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelAISettings">Cancel</button>
+                    <button type="submit" class="btn btn-primary">&#128190; Save Settings</button>
                 </div>
             </form>
         </div>

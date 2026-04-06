@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, No
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
+const { createProvider } = require('./ai-provider');
 
 // Get icon path - ensure absolute path for better reliability
 function getIconPath() {
@@ -411,6 +412,19 @@ class MultiBrowserApp {
         ipcMain.handle('update-session-auto-open', async (event, sessionId, autoOpen) => {
             return this.updateSessionAutoOpen(sessionId, autoOpen);
         });
+
+        // AI Assistant IPC handlers
+        ipcMain.handle('ai-get-settings', async () => {
+            return this.getAISettings();
+        });
+
+        ipcMain.handle('ai-save-settings', async (event, settings) => {
+            return this.saveAISettings(settings);
+        });
+
+        ipcMain.handle('ai-request', async (event, { action, text }) => {
+            return this.handleAIRequest(action, text);
+        });
     }
 
     async createBrowserSession(config) {
@@ -495,13 +509,17 @@ class MultiBrowserApp {
             const sessionData = await db.getData(`/sessions/${sessionId}`);
             const partitionName = sessionData.partition || `persist:session-${sessionId}`;
 
+            const preloadPath = path.join(__dirname, 'preload', 'index.js');
+            console.log('[ai] Creating browser view with preload:', preloadPath);
+
             const view = new WebContentsView({
                 webPreferences: {
                     partition: partitionName,
                     nodeIntegration: false,
                     contextIsolation: true,
+                    sandbox: false, // Required for preload require() in Electron 20+
                     webSecurity: true,
-                    preload: path.join(__dirname, 'preload', 'notifications.js')
+                    preload: preloadPath
                 }
             });
 
@@ -643,6 +661,31 @@ class MultiBrowserApp {
     }
 
     setupBrowserViewEvents(view, sessionId, sessionName) {
+        // Intercept AI Assistant keyboard shortcut at the Electron level
+        // This fires before the page gets the event, so it can't be blocked
+        view.webContents.on('before-input-event', async (event, input) => {
+            if (input.type !== 'keyDown' || !input.alt || input.control || input.meta) return;
+
+            // Read configured shortcut key (default 'H')
+            let targetKey = 'h';
+            try {
+                const settings = await this.getAISettings();
+                if (settings.shortcut) {
+                    const parts = settings.shortcut.split('+');
+                    targetKey = (parts[parts.length - 1] || 'h').toLowerCase();
+                }
+            } catch { }
+
+            const codeMatch = input.code === `Key${targetKey.toUpperCase()}`;
+            const keyMatch = input.key.toLowerCase() === targetKey;
+
+            if (codeMatch || keyMatch) {
+                console.log(`[ai] Alt+${targetKey.toUpperCase()} intercepted for session ${sessionId}`);
+                event.preventDefault();
+                view.webContents.send('ai-toggle-toolbar');
+            }
+        });
+
         // Handle new window requests (target="_blank" links)
         view.webContents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
             console.log(`🔗 New window requested: ${url}`);
@@ -947,6 +990,58 @@ class MultiBrowserApp {
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
             }
+        }
+    }
+
+    // ── AI Assistant Methods ──
+
+    async getAISettings() {
+        try {
+            return await db.getData('/ai-settings');
+        } catch {
+            // Return defaults if not yet configured
+            return {
+                provider: 'claude-cli',
+                claudeApiKey: '',
+                openaiApiKey: '',
+                claudeModel: 'claude-sonnet-4-6-20250514',
+                openaiModel: 'gpt-4o',
+                targetLanguage: 'English',
+                shortcut: 'Alt+H'
+            };
+        }
+    }
+
+    async saveAISettings(settings) {
+        try {
+            await db.push('/ai-settings', settings);
+
+            // Notify all browser views about updated shortcut
+            for (const [, view] of this.browserViews) {
+                try {
+                    view.webContents.send('ai-update-shortcut', settings.shortcut);
+                } catch { }
+            }
+
+            console.log('AI settings saved');
+            return { success: true };
+        } catch (error) {
+            console.error('Error saving AI settings:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async handleAIRequest(action, text) {
+        try {
+            const settings = await this.getAISettings();
+            const provider = createProvider(settings);
+            const result = await provider.sendRequest(action, text, {
+                targetLanguage: settings.targetLanguage || 'English'
+            });
+            return { success: true, text: result };
+        } catch (error) {
+            console.error('AI request error:', error);
+            return { success: false, error: error.message };
         }
     }
 

@@ -405,9 +405,25 @@ body {
     background: white !important;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
     outline: none;
     border-color: #667eea;
+}
+
+.form-select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.3s ease;
+    position: relative;
+    z-index: 2147483647 !important;
+    pointer-events: all !important;
+    background: white !important;
+    cursor: pointer;
+    appearance: auto;
 }
 
 .modal-actions {
