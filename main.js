@@ -646,10 +646,15 @@ class MultiBrowserApp {
     setupBrowserViewEvents(view, sessionId, sessionName) {
         // Intercept AI Assistant keyboard shortcut (Alt+H) at the Electron level
         // This is more reliable than DOM-level listeners since the page may consume events
-        view.webContents.on('before-input-event', async (event, input) => {
-            if (input.alt && input.key.toLowerCase() === 'h' && input.type === 'keyDown') {
-                event.preventDefault();
-                view.webContents.send('ai-toggle-toolbar');
+        view.webContents.on('before-input-event', (event, input) => {
+            if (input.type === 'keyDown' && input.alt && !input.control && !input.meta) {
+                // Use code (layout-independent) with key fallback
+                const isH = input.code === 'KeyH' || input.key.toLowerCase() === 'h';
+                if (isH) {
+                    console.log('[ai] Alt+H intercepted via before-input-event for session', sessionId);
+                    event.preventDefault();
+                    view.webContents.send('ai-toggle-toolbar');
+                }
             }
         });
 

@@ -1,15 +1,46 @@
-const { ipcRenderer, contextBridge } = require('electron');
-
-// Expose AI assistant API to the page via contextBridge
-// Note: since notifications.js already uses ipcRenderer directly (nodeIntegration-like pattern),
-// we follow the same pattern here for consistency.
+const { ipcRenderer } = require('electron');
 
 (() => {
+    console.log('[ai-assistant] Preload script starting...');
+
     // ── State ──
     let toolbarVisible = false;
     let shortcutKey = 'h'; // default: Alt+H
     let toolbar = null;
     let resultCard = null;
+    let initialized = false;
+
+    // ── Register IPC listeners IMMEDIATELY (before DOM is ready) ──
+    // This ensures we can receive 'ai-toggle-toolbar' from main process at any time.
+    ipcRenderer.on('ai-toggle-toolbar', () => {
+        console.log('[ai-assistant] Received ai-toggle-toolbar IPC');
+        if (initialized) {
+            toggleMenu();
+        } else {
+            console.log('[ai-assistant] Toolbar not yet initialized, queuing toggle');
+            // Retry after initialization
+            const check = setInterval(() => {
+                if (initialized) {
+                    clearInterval(check);
+                    toggleMenu();
+                }
+            }, 200);
+            setTimeout(() => clearInterval(check), 5000);
+        }
+    });
+
+    ipcRenderer.on('ai-update-shortcut', (_e, newShortcut) => {
+        if (newShortcut) {
+            const parts = newShortcut.split('+');
+            shortcutKey = parts[parts.length - 1] || 'h';
+            const fab = document.querySelector('#ai-assistant-fab');
+            if (fab) {
+                fab.title = `AI Assistant (${newShortcut})`;
+            }
+        }
+    });
+
+    console.log('[ai-assistant] IPC listeners registered');
 
     // ── Styles ──
     const STYLES = `
@@ -243,14 +274,17 @@ const { ipcRenderer, contextBridge } = require('electron');
 
     // ── Inject styles ──
     function injectStyles() {
+        if (document.getElementById('ai-assistant-styles')) return;
         const style = document.createElement('style');
         style.id = 'ai-assistant-styles';
         style.textContent = STYLES;
-        document.head.appendChild(style);
+        (document.head || document.documentElement).appendChild(style);
     }
 
     // ── Create toolbar DOM ──
     function createToolbar() {
+        if (document.getElementById('ai-assistant-toolbar')) return;
+
         toolbar = document.createElement('div');
         toolbar.id = 'ai-assistant-toolbar';
         toolbar.innerHTML = `
@@ -342,10 +376,16 @@ const { ipcRenderer, contextBridge } = require('electron');
                 hideMenu();
             }
         });
+
+        console.log('[ai-assistant] Toolbar DOM created and appended to body');
     }
 
     // ── Menu toggle ──
     function toggleMenu() {
+        if (!toolbar) {
+            console.warn('[ai-assistant] toggleMenu called but toolbar is null');
+            return;
+        }
         const menu = toolbar.querySelector('#ai-assistant-menu');
         const fab = toolbar.querySelector('#ai-assistant-fab');
         toolbarVisible = !toolbarVisible;
@@ -357,6 +397,7 @@ const { ipcRenderer, contextBridge } = require('electron');
             menu.classList.remove('visible');
             fab.classList.remove('active');
         }
+        console.log('[ai-assistant] Menu toggled, visible:', toolbarVisible);
     }
 
     function hideMenu() {
@@ -426,11 +467,8 @@ const { ipcRenderer, contextBridge } = require('electron');
 
         if (inputBox) {
             inputBox.focus();
-            // Clear existing content
             inputBox.textContent = '';
-            // Insert new text
             document.execCommand('insertText', false, text);
-            // Trigger input event so WhatsApp recognizes the change
             inputBox.dispatchEvent(new Event('input', { bubbles: true }));
         }
     }
@@ -468,15 +506,13 @@ const { ipcRenderer, contextBridge } = require('electron');
         }
     }
 
-    // ── Keyboard shortcut ──
+    // ── Keyboard shortcut (DOM-level, secondary mechanism) ──
     function setupKeyboardShortcut() {
-        // DOM-level listener as a secondary mechanism
-        // The primary trigger is 'before-input-event' in main.js -> 'ai-toggle-toolbar' IPC
         document.addEventListener('keydown', (e) => {
-            // Alt + configured key (default H) — check both key and code for reliability
-            const keyMatch = e.key.toLowerCase() === shortcutKey.toLowerCase();
+            // Alt + configured key (default H)
             const codeMatch = e.code === `Key${shortcutKey.toUpperCase()}`;
-            if (e.altKey && (keyMatch || codeMatch)) {
+            const keyMatch = e.key.toLowerCase() === shortcutKey.toLowerCase();
+            if (e.altKey && (codeMatch || keyMatch)) {
                 e.preventDefault();
                 e.stopPropagation();
                 toggleMenu();
@@ -484,36 +520,10 @@ const { ipcRenderer, contextBridge } = require('electron');
 
             // ESC to close
             if (e.key === 'Escape') {
-                if (toolbarVisible) {
-                    hideMenu();
-                }
-                if (resultCard && resultCard.classList.contains('visible')) {
-                    hideResultCard();
-                }
+                if (toolbarVisible) hideMenu();
+                if (resultCard && resultCard.classList.contains('visible')) hideResultCard();
             }
-        }, true); // Use capture phase to get events before the page
-    }
-
-    // ── Listen for shortcut updates from main process ──
-    function listenForSettingsUpdates() {
-        ipcRenderer.on('ai-update-shortcut', (_e, newShortcut) => {
-            if (newShortcut) {
-                // Parse shortcut like "Alt+H" to extract the key
-                const parts = newShortcut.split('+');
-                shortcutKey = parts[parts.length - 1] || 'h';
-
-                // Update tooltip
-                const fab = document.querySelector('#ai-assistant-fab');
-                if (fab) {
-                    fab.title = `AI Assistant (${newShortcut})`;
-                }
-            }
-        });
-
-        // Listen for toolbar toggle from main process (global shortcut)
-        ipcRenderer.on('ai-toggle-toolbar', () => {
-            toggleMenu();
-        });
+        }, true); // capture phase
     }
 
     // ── Load initial settings ──
@@ -541,27 +551,39 @@ const { ipcRenderer, contextBridge } = require('electron');
         return div.innerHTML;
     }
 
-    // ── Initialize ──
-    function init() {
-        // Wait for DOM to be ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setup);
-        } else {
-            setup();
-        }
-    }
-
+    // ── Initialize DOM elements ──
     function setup() {
-        // Small delay to ensure page content is loaded (WhatsApp Web loads dynamically)
-        setTimeout(() => {
+        try {
             injectStyles();
             createToolbar();
             setupKeyboardShortcut();
-            listenForSettingsUpdates();
             loadSettings();
-            console.log('[ai-assistant] AI Assistant toolbar injected');
-        }, 2000);
+            initialized = true;
+            console.log('[ai-assistant] AI Assistant fully initialized');
+        } catch (err) {
+            console.error('[ai-assistant] Error during setup:', err);
+        }
     }
 
-    init();
+    // Wait for body to exist, then inject
+    function waitForBody() {
+        if (document.body) {
+            setup();
+        } else {
+            // Body not ready yet, observe until it is
+            const observer = new MutationObserver(() => {
+                if (document.body) {
+                    observer.disconnect();
+                    setup();
+                }
+            });
+            observer.observe(document.documentElement, { childList: true });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', waitForBody);
+    } else {
+        waitForBody();
+    }
 })();
