@@ -644,6 +644,15 @@ class MultiBrowserApp {
     }
 
     setupBrowserViewEvents(view, sessionId, sessionName) {
+        // Intercept AI Assistant keyboard shortcut (Alt+H) at the Electron level
+        // This is more reliable than DOM-level listeners since the page may consume events
+        view.webContents.on('before-input-event', async (event, input) => {
+            if (input.alt && input.key.toLowerCase() === 'h' && input.type === 'keyDown') {
+                event.preventDefault();
+                view.webContents.send('ai-toggle-toolbar');
+            }
+        });
+
         // Handle new window requests (target="_blank" links)
         view.webContents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
             console.log(`🔗 New window requested: ${url}`);

@@ -470,9 +470,13 @@ const { ipcRenderer, contextBridge } = require('electron');
 
     // ── Keyboard shortcut ──
     function setupKeyboardShortcut() {
+        // DOM-level listener as a secondary mechanism
+        // The primary trigger is 'before-input-event' in main.js -> 'ai-toggle-toolbar' IPC
         document.addEventListener('keydown', (e) => {
-            // Alt + configured key (default H)
-            if (e.altKey && e.key.toLowerCase() === shortcutKey.toLowerCase()) {
+            // Alt + configured key (default H) — check both key and code for reliability
+            const keyMatch = e.key.toLowerCase() === shortcutKey.toLowerCase();
+            const codeMatch = e.code === `Key${shortcutKey.toUpperCase()}`;
+            if (e.altKey && (keyMatch || codeMatch)) {
                 e.preventDefault();
                 e.stopPropagation();
                 toggleMenu();
@@ -487,7 +491,7 @@ const { ipcRenderer, contextBridge } = require('electron');
                     hideResultCard();
                 }
             }
-        });
+        }, true); // Use capture phase to get events before the page
     }
 
     // ── Listen for shortcut updates from main process ──
