@@ -2,3 +2,5 @@ node_modules/
 browser_sessions/
 .env
 sessions.json
+app.log
+logs.txt
