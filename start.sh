@@ -1,3 +1,3 @@
 #!/bin/bash
-cd /home/peralta/Applications/multi-browser
+cd "$(dirname "$0")"
 npm run dev > app.log 2>&1 &

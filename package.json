@@ -4,7 +4,8 @@
   "description": "Desktop app for managing multiple isolated browser instances",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "electron --no-sandbox .",
+    "start:sandbox": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
@@ -13,7 +14,8 @@
     "build:rpm": "electron-builder --linux rpm",
     "build:all": "electron-builder --linux",
     "build-win": "electron-builder --win",
-    "dev": "electron . --dev"
+    "dev": "electron --no-sandbox . --dev",
+    "dev:sandbox": "electron . --dev"
   },
   "keywords": [
     "browser",

@@ -85,3 +85,12 @@ The installer will be created in the `dist` folder.
 **Data not persisting**:
 - Don't delete the `browser-sessions` folder
 - Make sure the app has write permissions to its directory
+
+**Linux Electron sandbox error**:
+- If Electron fails with `chrome-sandbox is owned by root and has mode 4755`, run `npm run dev` or `./start.sh`; these use `--no-sandbox` for local development.
+- To keep Chromium sandboxing enabled, fix the helper permissions after `npm install`:
+  ```bash
+  sudo chown root:root node_modules/electron/dist/chrome-sandbox
+  sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+  npm run dev:sandbox
+  ```
