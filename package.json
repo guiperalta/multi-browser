@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Desktop app for managing multiple isolated browser instances",
   "main": "main.js",
+  "desktopName": "multi-browser.desktop",
   "scripts": {
     "start": "electron --no-sandbox .",
     "start:sandbox": "electron .",
@@ -41,12 +42,22 @@
     "files": [
       "**/*",
       "!node_modules/**/*",
-      "node_modules/node-json-db/**/*"
+      "node_modules/node-json-db/**/*",
+      "node_modules/rwlock/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/icon.png",
+        "to": "assets/icon.png"
+      },
+      {
+        "from": "assets/icon-512x512.png",
+        "to": "assets/icon-512x512.png"
+      }
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico",
-      "sign": null
+      "icon": "assets/icon.ico"
     },
     "mac": {
       "target": "dmg",
@@ -59,7 +70,8 @@
         "rpm",
         "AppImage"
       ],
-      "icon": "assets/icon.png",
+      "icon": "build/icons",
+      "syncDesktopName": true,
       "category": "Network",
       "maintainer": "Multi Browser Team"
     }

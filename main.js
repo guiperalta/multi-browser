@@ -4,27 +4,48 @@ const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
 const { createProvider } = require('./ai-provider');
 
+const LINUX_DESKTOP_NAME = 'multi-browser.desktop';
+const LINUX_WM_CLASS = path.basename(LINUX_DESKTOP_NAME, '.desktop');
+
+if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('class', LINUX_WM_CLASS);
+}
+
 // Get icon path - ensure absolute path for better reliability
 function getIconPath() {
-    // Try app.getAppPath() first (works in packaged apps)
-    let iconPath;
-    try {
-        iconPath = path.join(app.getAppPath(), 'assets', 'icon.png');
-        if (fs.existsSync(iconPath)) {
-            return path.resolve(iconPath);
+    const candidatePaths = [];
+    const iconFileNames = ['icon-512x512.png', 'icon.png'];
+
+    const addCandidates = (basePath) => {
+        if (!basePath) {
+            return;
         }
+
+        for (const iconFileName of iconFileNames) {
+            candidatePaths.push(path.join(basePath, 'assets', iconFileName));
+        }
+    };
+
+    if (app.isPackaged) {
+        addCandidates(process.resourcesPath);
+    }
+
+    try {
+        addCandidates(app.getAppPath());
     } catch (e) {
         // app.getAppPath() might not be available yet
     }
-    
-    // Fallback to __dirname (works in development)
-    iconPath = path.join(__dirname, 'assets', 'icon.png');
-    if (fs.existsSync(iconPath)) {
-        return path.resolve(iconPath);
+
+    addCandidates(__dirname);
+
+    for (const iconPath of candidatePaths) {
+        if (fs.existsSync(iconPath)) {
+            return path.resolve(iconPath);
+        }
     }
-    
+
     // If icon doesn't exist, return undefined (Electron will use default)
-    console.warn('⚠️ Icon not found at:', iconPath);
+    console.warn('⚠️ Icon not found. Tried:', candidatePaths);
     return undefined;
 }
 
@@ -316,7 +337,7 @@ class MultiBrowserApp {
             console.log('🖼️ Icon set explicitly on window');
         }
 
-        this.mainWindow.loadFile('index.html');
+        this.mainWindow.loadFile(path.join(__dirname, 'index.html'));
         
         // Show window after icon is set
         this.mainWindow.once('ready-to-show', () => {
