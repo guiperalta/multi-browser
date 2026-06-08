@@ -9,6 +9,16 @@ const LINUX_WM_CLASS = path.basename(LINUX_DESKTOP_NAME, '.desktop');
 
 if (process.platform === 'linux') {
     app.commandLine.appendSwitch('class', LINUX_WM_CLASS);
+
+    // On Wayland, an app can only raise/focus itself when it holds an
+    // xdg-activation token (e.g. one handed to it by a notification click).
+    // That mechanism only exists in native Wayland mode — under XWayland the
+    // compositor refuses the raise and just flashes the icon. Prefer native
+    // Wayland when the session is Wayland so notification-click can focus the
+    // window; fall back to X11 automatically otherwise.
+    if (process.env.XDG_SESSION_TYPE === 'wayland') {
+        app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+    }
 }
 
 // Get icon path - ensure absolute path for better reliability
@@ -156,50 +166,16 @@ class MultiBrowserApp {
             }
         });
 
-        // Show a first-class native notification we can handle clicks for
-        ipcMain.on('show-native-notification', (event, payload) => {
+        // The site's own notification was clicked: bring its window/tab to the
+        // front. The page keeps showing the real notification and handles
+        // conversation navigation itself; we only focus the right session.
+        ipcMain.on('focus-session-from-notification', (event) => {
             const sessionId = this.getSessionIdByWebContents(event.sender);
-            const { title, options, url } = payload || {};
-
-            console.log(`🔔 Creating native notification for session ${sessionId}: "${title}"`);
-            console.log(`🔔 Notification options:`, options);
-            console.log(`🔔 URL: ${url}`);
-
-            try {
-                const body = options?.body || '';
-                const notification = new Notification({
-                    title,
-                    body,
-                    silent: options?.silent === true,
-                    icon: getIconPath() // Add app icon to notification
-                });
-
-                // Handle notification click
-                notification.on('click', () => {
-                    console.log(`🔔 REAL NOTIFICATION CLICKED for session ${sessionId}`);
-                    console.log(`🔔 Will focus session: ${sessionId}`);
-                    this.handleNotificationClick(sessionId);
-
-                    // Remove this notification from active notifications
-                    this.activeNotifications.delete(sessionId);
-                });
-
-                // Handle notification close
-                notification.on('close', () => {
-                    console.log(`🔔 REAL NOTIFICATION CLOSED for session ${sessionId}`);
-                    // Remove this notification from active notifications
-                    this.activeNotifications.delete(sessionId);
-                });
-
-                // Store the notification for this session
-                this.activeNotifications.set(sessionId, notification);
-
-                notification.show();
-
-                console.log(`🔔 REAL notification shown and tracked for session ${sessionId}`);
-
-            } catch (err) {
-                console.error('Failed to show native notification:', err);
+            console.log(`🔔 Notification clicked for session ${sessionId}`);
+            if (sessionId) {
+                this.handleNotificationClick(sessionId);
+            } else {
+                console.warn('🔔 Could not resolve session for clicked notification');
             }
         });
     }
@@ -217,7 +193,7 @@ class MultiBrowserApp {
                 return;
             }
 
-            // Use the same Notification constructor that works in the show-native-notification handler
+            // Main-process notification used only for the Ctrl+T self-test.
             const { Notification } = require('electron');
             const notification = new Notification({
                 title: 'Test Notification',
@@ -264,28 +240,27 @@ class MultiBrowserApp {
             console.log(`   - Visible: ${this.mainWindow.isVisible()}`);
             console.log(`   - Focused: ${this.mainWindow.isFocused()}`);
 
-            // Bring window to front and focus it
+            // Bring window to front and focus it. Order matters and every step
+            // runs unconditionally: an already-visible-but-occluded window still
+            // needs show()/moveTop() — focus() alone is ignored by most Linux WMs.
             if (this.mainWindow.isMinimized()) {
                 this.mainWindow.restore();
                 console.log('🔄 Window restored from minimized state');
             }
 
-            if (!this.mainWindow.isVisible()) {
-                this.mainWindow.show();
-                console.log('👁️ Window shown');
-            }
-
-            this.mainWindow.focus();
             this.mainWindow.setAlwaysOnTop(true);
-            console.log('🎯 Window focused and set to always on top');
+            this.mainWindow.show();   // re-maps + raises even when already visible
+            this.mainWindow.focus();
+            try { this.mainWindow.moveTop(); } catch { /* not supported on some WMs */ }
+            console.log('🎯 Window shown, focused and raised');
 
-            // Remove always on top after a short delay to ensure focus
+            // Remove always on top shortly after so it doesn't stay pinned.
             setTimeout(() => {
                 if (this.mainWindow && !this.mainWindow.isDestroyed()) {
                     this.mainWindow.setAlwaysOnTop(false);
                     console.log('🎯 Always on top removed');
                 }
-            }, 1000);
+            }, 500);
 
             console.log('🎯 Window focused and brought to front');
 
