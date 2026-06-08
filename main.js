@@ -302,8 +302,16 @@ class MultiBrowserApp {
                 webviewTag: true // Enable webview tag
             },
             icon: icon || iconPath, // Use nativeImage if available, fallback to path
-            title: 'Multi Browser Manager',
+            title: `Multi Browser v${app.getVersion()}`,
             show: false // Don't show until ready
+        });
+
+        // Keep the version in the window title — otherwise index.html's <title>
+        // would overwrite it once the shell loads.
+        const windowTitle = `Multi Browser v${app.getVersion()}`;
+        this.mainWindow.on('page-title-updated', (event) => {
+            event.preventDefault();
+            this.mainWindow.setTitle(windowTitle);
         });
 
         // Set icon explicitly (important for Linux)

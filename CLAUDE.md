@@ -8,7 +8,7 @@ Standard Electron split — one main process, one renderer for the app shell (ta
 
 | File | Role |
 |------|------|
-| `main.js` | Main process. Owns the `BrowserWindow`, creates one `WebContentsView` per session, manages session partitions, downloads, native notifications, and AI IPC. App bootstrap is `new MultiBrowserApp()` at the bottom; Linux command-line switches are appended at module load (before `app.whenReady`). |
+| `main.js` | Main process. Owns the `BrowserWindow`, creates one `WebContentsView` per session, manages session partitions, downloads, native notifications, and AI IPC. App bootstrap is `new MultiBrowserApp()` at the bottom; Linux command-line switches are appended at module load (before `app.whenReady`). The window title is `Multi Browser v<version>` (from `app.getVersion()`); a `page-title-updated` handler keeps it pinned so the shell's `<title>` can't overwrite it. |
 | `renderer.js` | App-shell UI logic: tab bar, session list, create/rename modals, AI settings. Talks to main over IPC. Maps: `sessions` (id → metadata), `activeTabs` (id → tab element). |
 | `index.html` / `styles.css` | App-shell markup and styling (NOT the web content — that's rendered in the per-session `WebContentsView`). |
 | `preload/index.js` | Single preload for every session view (Electron allows one preload per view). Requires `notifications.js` then `ai-assistant.js`. |
@@ -60,4 +60,4 @@ npm run build:win       # Windows nsis installer
 npm run build:mac       # macOS dmg
 ```
 
-Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version`.
+Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version` (currently `1.0.1`) and is also shown in the window title. Bump `version` there before re-packaging.
