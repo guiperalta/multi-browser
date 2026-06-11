@@ -1,0 +1,41 @@
+name: release
+
+# Builds installers and attaches them to a GitHub Release whenever a
+# version tag is pushed:
+#   git tag v1.0.2 && git push origin v1.0.2
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx electron-builder --linux deb AppImage
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+            dist/*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx electron-builder --win
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
