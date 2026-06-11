@@ -33,6 +33,11 @@ class MultiBrowserUI {
             this.updateTabFavicon(sessionId, favicon);
         });
 
+        // Generic status messages from the main process
+        ipcRenderer.on('app-message', (_e, { text, type }) => {
+            this.showNotification(text, type || 'info');
+        });
+
         // Listen for external link notifications
         ipcRenderer.on('external-link-opened', (event, { url }) => {
             const domain = new URL(url).hostname;

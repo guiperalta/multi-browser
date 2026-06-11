@@ -81,6 +81,60 @@ function getIconNativeImage() {
 // Initialize database for storing sessions
 const db = new JsonDB(new Config("sessions", true, false, '/'));
 
+// Parse a WhatsApp link in any of its public forms and convert it to the
+// equivalent WhatsApp Web URL, or return null if it isn't a WhatsApp link:
+//   whatsapp://send/?phone=55...&text=...   (the "Open app" deep link)
+//   https://wa.me/5514997547096?text=...
+//   https://api.whatsapp.com/send/?phone=55...&text=...
+function parseWhatsAppLink(rawUrl) {
+    if (typeof rawUrl !== 'string') return null;
+
+    let url;
+    try {
+        url = new URL(rawUrl.trim());
+    } catch {
+        return null;
+    }
+
+    let phone = null;
+    let text = null;
+
+    if (url.protocol === 'whatsapp:') {
+        phone = url.searchParams.get('phone');
+        text = url.searchParams.get('text');
+    } else if (url.protocol === 'https:' || url.protocol === 'http:') {
+        const host = url.hostname.replace(/^www\./, '');
+        const pathname = url.pathname.replace(/\/+$/, '');
+
+        if (host === 'wa.me') {
+            if (/^\/\+?\d[\d\-\s]*$/.test(pathname)) {
+                phone = pathname.slice(1);
+            } else if (pathname === '/send' || pathname === '') {
+                phone = url.searchParams.get('phone');
+            } else {
+                return null; // wa.me/message/<code> etc. — can't map to web.whatsapp.com
+            }
+            text = url.searchParams.get('text');
+        } else if (host === 'api.whatsapp.com' || host === 'whatsapp.com') {
+            if (pathname !== '/send') return null;
+            phone = url.searchParams.get('phone');
+            text = url.searchParams.get('text');
+        } else {
+            return null;
+        }
+    } else {
+        return null;
+    }
+
+    phone = (phone || '').replace(/\D/g, '');
+    if (phone.length < 5) return null;
+
+    const target = new URL('https://web.whatsapp.com/send');
+    target.searchParams.set('phone', phone);
+    if (text) target.searchParams.set('text', text);
+    return target.toString();
+}
+
 class MultiBrowserApp {
     constructor() {
         this.mainWindow = null;
@@ -89,6 +143,7 @@ class MultiBrowserApp {
         this.activeBrowserView = null;
         this.activeNotifications = new Map(); // sessionId -> notification objects
         this.recentlyOpenedFolders = new Set(); // Track folders that were recently opened
+        this.pendingSessionNavigations = new Map(); // sessionId -> URL to load once the view is created
         this.init();
     }
 
@@ -103,7 +158,50 @@ class MultiBrowserApp {
     }
 
     init() {
+        // Single instance: clicking a whatsapp:// link while the app is running
+        // launches a second instance with the URL in argv — forward it to the
+        // running instance instead of opening a second window.
+        const gotLock = app.requestSingleInstanceLock();
+        if (!gotLock) {
+            app.quit();
+            return;
+        }
+
+        app.on('second-instance', (_event, argv) => {
+            const link = argv.find(arg => parseWhatsAppLink(arg));
+            console.log(`📲 second-instance received${link ? ` with WhatsApp link: ${link}` : ''}`);
+            if (link) {
+                this.handleWhatsAppLink(link);
+            } else if (this.mainWindow) {
+                if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+                this.mainWindow.show();
+                this.mainWindow.focus();
+            }
+        });
+
+        // macOS delivers protocol URLs via open-url instead of argv
+        app.on('open-url', (event, url) => {
+            event.preventDefault();
+            this.handleWhatsAppLink(url);
+        });
+
         app.whenReady().then(() => {
+            // Register as the OS handler for whatsapp:// deep links so the
+            // "Open app" button on wa.me / api.whatsapp.com pages opens us.
+            // (On Linux this needs the packaged .desktop file — see CLAUDE.md.)
+            try {
+                if (process.defaultApp) {
+                    // Dev mode: point the handler at "electron <app path>"
+                    if (process.argv.length >= 2) {
+                        app.setAsDefaultProtocolClient('whatsapp', process.execPath, [path.resolve(process.argv[1])]);
+                    }
+                } else {
+                    app.setAsDefaultProtocolClient('whatsapp');
+                }
+            } catch (error) {
+                console.warn('⚠️ Could not register whatsapp:// protocol handler:', error.message);
+            }
+
             // Ensure proper Windows notification activation routing
             try {
                 app.setAppUserModelId('com.multibrowser.app');
@@ -140,6 +238,16 @@ class MultiBrowserApp {
             console.log('Node version:', process.versions.node);
             this.createMainWindow();
             this.loadSavedSessions();
+
+            // Cold start from a WhatsApp link click: the URL arrives in argv.
+            // Wait for the shell to load so the renderer can open the tab.
+            const startupLink = process.argv.find(arg => parseWhatsAppLink(arg));
+            if (startupLink) {
+                console.log(`📲 Launched with WhatsApp link: ${startupLink}`);
+                this.mainWindow.webContents.once('did-finish-load', () => {
+                    setTimeout(() => this.handleWhatsAppLink(startupLink), 800);
+                });
+            }
         });
 
         app.on('window-all-closed', () => {
@@ -276,6 +384,68 @@ class MultiBrowserApp {
         } catch (error) {
             console.error('Error handling notification click:', error);
         }
+    }
+
+    // Route a WhatsApp link (whatsapp://, wa.me, api.whatsapp.com) to the
+    // WhatsApp session's tab: convert it to a web.whatsapp.com/send URL,
+    // navigate the session there and bring its tab to the front.
+    async handleWhatsAppLink(rawUrl) {
+        const targetUrl = parseWhatsAppLink(rawUrl);
+        console.log(`📲 WhatsApp link: ${rawUrl} → ${targetUrl || 'not parseable'}`);
+        if (!targetUrl) return false;
+
+        const sessionId = await this.findWhatsAppSessionId();
+        if (!sessionId) {
+            console.warn('📲 No WhatsApp session found to receive the link');
+            if (this.mainWindow) {
+                this.mainWindow.show();
+                this.mainWindow.focus();
+                this.mainWindow.webContents.send('app-message', {
+                    text: 'WhatsApp link received, but no WhatsApp session exists. Create one pointing to web.whatsapp.com.',
+                    type: 'error'
+                });
+            }
+            return false;
+        }
+
+        const view = this.browserViews.get(sessionId);
+        if (view) {
+            view.webContents.loadURL(targetUrl);
+        } else {
+            // Tab not open yet: remember the URL; createBrowserView will load
+            // it instead of the session's start URL when the tab opens below.
+            this.pendingSessionNavigations.set(sessionId, targetUrl);
+        }
+
+        // Raises the window and tells the renderer to open/switch to the tab
+        this.handleNotificationClick(sessionId);
+        return true;
+    }
+
+    // Pick the session that should receive WhatsApp links: the active view if
+    // it's on WhatsApp Web, then any open WhatsApp view, then the most
+    // recently used saved session whose URL points at WhatsApp.
+    async findWhatsAppSessionId() {
+        const isWhatsAppView = (view) => {
+            try {
+                return view.webContents.getURL().includes('web.whatsapp.com');
+            } catch {
+                return false;
+            }
+        };
+
+        if (this.activeBrowserView && isWhatsAppView(this.activeBrowserView)) {
+            return this.getSessionIdByWebContents(this.activeBrowserView.webContents);
+        }
+
+        for (const [sessionId, view] of this.browserViews) {
+            if (isWhatsAppView(view)) return sessionId;
+        }
+
+        const sessions = await this.getSessions();
+        sessions.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
+        const match = sessions.find(s => (s.url || '').includes('whatsapp.com'));
+        return match ? match.id : null;
     }
 
     createMainWindow() {
@@ -536,8 +706,11 @@ class MultiBrowserApp {
             const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
             view.webContents.setUserAgent(chromeUserAgent);
 
-            // Load the URL
-            view.webContents.loadURL(sessionData.url);
+            // Load the URL (a routed WhatsApp link takes precedence over the
+            // session's start URL — see handleWhatsAppLink)
+            const pendingUrl = this.pendingSessionNavigations.get(sessionId);
+            this.pendingSessionNavigations.delete(sessionId);
+            view.webContents.loadURL(pendingUrl || sessionData.url);
 
             return { success: true, sessionId };
         } catch (error) {
@@ -695,6 +868,12 @@ class MultiBrowserApp {
             console.log(`🔗 New window requested: ${url}`);
             console.log(`🔗 Disposition: ${disposition}`);
 
+            // WhatsApp links open in the WhatsApp tab, not the system browser
+            if (parseWhatsAppLink(url)) {
+                this.handleWhatsAppLink(url);
+                return { action: 'deny' };
+            }
+
             // Open external links in system browser
             if (disposition === 'new-window' || disposition === 'foreground-tab' || disposition === 'background-tab') {
                 console.log(`🌐 Opening ${url} in system browser`);
@@ -713,12 +892,24 @@ class MultiBrowserApp {
         // Handle navigation events
         view.webContents.on('will-navigate', (event, navigationUrl) => {
             console.log(`🧭 Navigation to: ${navigationUrl}`);
-            // Allow normal navigation within the same view
+
+            // Route WhatsApp links to the WhatsApp tab (web.whatsapp.com
+            // itself doesn't match, so the WhatsApp session navigates freely)
+            if (parseWhatsAppLink(navigationUrl)) {
+                event.preventDefault();
+                this.handleWhatsAppLink(navigationUrl);
+            }
         });
 
         // Handle external protocol requests (like mailto:, tel:, etc.)
         view.webContents.on('will-redirect', (event, redirectUrl) => {
             console.log(`🔄 Redirect to: ${redirectUrl}`);
+
+            if (parseWhatsAppLink(redirectUrl)) {
+                event.preventDefault();
+                this.handleWhatsAppLink(redirectUrl);
+                return;
+            }
 
             // Check if it's an external protocol
             if (redirectUrl.startsWith('mailto:') ||

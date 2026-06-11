@@ -31,6 +31,14 @@ This is subtle and was the source of a real bug — read before touching it.
 3. On show/click, the main-world hook dispatches a `CustomEvent` on `document` (DOM nodes are shared across isolated worlds, so the event crosses the boundary). The isolated-world preload listens and forwards over IPC: `site-notification` (logging) and `focus-session-from-notification` (click).
 4. Main resolves the originating session from `event.sender`, then `handleNotificationClick()` raises the window and sends `focus-session` to the renderer, which switches to that session's tab.
 
+### WhatsApp deep links (wa.me / "Abrir app")
+
+The app registers itself as the OS handler for the `whatsapp://` scheme (`app.setAsDefaultProtocolClient` + `build.protocols` in `package.json`, which adds `MimeType=x-scheme-handler/whatsapp` to the Linux .desktop file). Clicking "Abrir app"/"Open app" on a wa.me or api.whatsapp.com interstitial fires `whatsapp://send/?phone=...`, which lands here instead of a (nonexistent) native WhatsApp app.
+
+Flow: `parseWhatsAppLink()` (top of `main.js`) normalizes `whatsapp://send`, `wa.me/<phone>`, and `api.whatsapp.com/send` URLs to `https://web.whatsapp.com/send?phone=...&text=...`; `handleWhatsAppLink()` picks the WhatsApp session (active view → any open WhatsApp view → most recently used saved session with a whatsapp.com URL), navigates it, and reuses `handleNotificationClick()` to raise the window and switch/open the tab (if the tab isn't open, the URL is parked in `pendingSessionNavigations` and consumed by `createBrowserView`). Links arrive via single-instance `second-instance` argv (app running), `process.argv` (cold start), or `open-url` (macOS). The same links clicked *inside* a session view are intercepted in `setWindowOpenHandler` / `will-navigate` / `will-redirect`. `wa.me/message/<code>` short links can't be mapped to web.whatsapp.com and are left alone.
+
+**Linux registration:** the .deb's .desktop file declares the scheme, and the app also runs `setAsDefaultProtocolClient` on startup. If the browser still doesn't offer Multi Browser, run `xdg-mime default multi-browser.desktop x-scheme-handler/whatsapp` once.
+
 **Linux / Wayland caveat:** on GNOME + Wayland, mutter enforces focus-stealing prevention — an app **cannot** un-minimize/raise itself; the compositor only flashes the dock icon ("attention" hint). This affects every app, not just this one, and is **not fixable from app code**. We launch in native Wayland mode (`ozone-platform-hint=auto`, set only when `XDG_SESSION_TYPE=wayland`) so a notification-click's `xdg-activation` token *can* authorize a raise, but mutter may still downgrade it to the attention hint. Tab-switch and conversation-open always work; raise-from-minimized depends on the compositor. User-side workaround: a GNOME extension such as "Steal My Focus Window".
 
 ## Develop
@@ -60,4 +68,4 @@ npm run build:win       # Windows nsis installer
 npm run build:mac       # macOS dmg
 ```
 
-Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version` (currently `1.0.1`) and is also shown in the window title. Bump `version` there before re-packaging.
+Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version` (currently `1.0.2`) and is also shown in the window title. Bump `version` there before re-packaging.
