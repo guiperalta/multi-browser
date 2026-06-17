@@ -1,6 +1,6 @@
 {
   "name": "multi-browser",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Desktop app for managing multiple isolated browser instances",
   "main": "main.js",
   "desktopName": "multi-browser.desktop",

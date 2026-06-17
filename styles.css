@@ -426,6 +426,18 @@ body {
     appearance: auto;
 }
 
+/* Multi-select language picker: show several rows, scroll the rest. */
+.form-select[multiple] {
+    min-height: 130px;
+    padding: 6px;
+    appearance: none;
+}
+
+.form-select[multiple] option {
+    padding: 4px 6px;
+    border-radius: 4px;
+}
+
 .modal-actions {
     display: flex;
     gap: 10px;

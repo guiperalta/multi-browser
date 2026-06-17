@@ -1,4 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage, Menu, MenuItem } = require('electron');
+
+// Default spellchecker languages for new sessions. Multi-language: each session
+// can override this with its own list (sessionData.spellLanguages).
+const DEFAULT_SPELL_LANGUAGES = ['pt-BR', 'en-US'];
 const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
@@ -587,6 +591,18 @@ class MultiBrowserApp {
             return this.updateSessionAutoOpen(sessionId, autoOpen);
         });
 
+        ipcMain.handle('update-session-languages', async (event, sessionId, languages) => {
+            return this.updateSessionLanguages(sessionId, languages);
+        });
+
+        ipcMain.handle('get-available-spellchecker-languages', async () => {
+            try {
+                return session.defaultSession.availableSpellCheckerLanguages || [];
+            } catch {
+                return [];
+            }
+        });
+
         // AI Assistant IPC handlers
         ipcMain.handle('ai-get-settings', async () => {
             return this.getAISettings();
@@ -624,7 +640,10 @@ class MultiBrowserApp {
                 autoOpen: false,
                 created: new Date().toISOString(),
                 lastAccessed: new Date().toISOString(),
-                partition: partitionName
+                partition: partitionName,
+                spellLanguages: Array.isArray(config.spellLanguages) && config.spellLanguages.length
+                    ? config.spellLanguages
+                    : DEFAULT_SPELL_LANGUAGES
             };
 
             await db.push(`/sessions/${sessionId}`, sessionData);
@@ -682,6 +701,10 @@ class MultiBrowserApp {
         try {
             const sessionData = await db.getData(`/sessions/${sessionId}`);
             const partitionName = sessionData.partition || `persist:session-${sessionId}`;
+
+            // Apply this session's spellchecker languages to its partition before
+            // the view loads, so the redline matches the language the user types in.
+            this.applySpellCheckerLanguages(session.fromPartition(partitionName), sessionData.spellLanguages);
 
             const preloadPath = path.join(__dirname, 'preload', 'index.js');
             console.log('[ai] Creating browser view with preload:', preloadPath);
@@ -837,6 +860,47 @@ class MultiBrowserApp {
         }
     }
 
+    // Set the Hunspell/spellchecker languages on a session partition. Multiple
+    // languages are checked simultaneously (Linux/Windows). Unsupported codes are
+    // dropped; macOS uses the OS spellchecker and ignores this entirely.
+    applySpellCheckerLanguages(sessionInstance, languages) {
+        try {
+            const available = sessionInstance.availableSpellCheckerLanguages || [];
+            const requested = (Array.isArray(languages) && languages.length) ? languages : DEFAULT_SPELL_LANGUAGES;
+            let langs = requested.filter(l => available.includes(l));
+            if (!langs.length) {
+                langs = DEFAULT_SPELL_LANGUAGES.filter(l => available.includes(l));
+            }
+            if (langs.length) {
+                sessionInstance.setSpellCheckerLanguages(langs);
+                console.log(`🔤 Spellchecker languages set: ${langs.join(', ')}`);
+            }
+        } catch (error) {
+            console.log('Could not set spellchecker languages:', error.message);
+        }
+    }
+
+    async updateSessionLanguages(sessionId, languages) {
+        try {
+            const sessionData = await db.getData(`/sessions/${sessionId}`);
+            sessionData.spellLanguages = Array.isArray(languages) && languages.length
+                ? languages
+                : DEFAULT_SPELL_LANGUAGES;
+
+            await db.push(`/sessions/${sessionId}`, sessionData);
+
+            // Apply live so the change takes effect without reopening the session.
+            const partitionName = sessionData.partition || `persist:session-${sessionId}`;
+            this.applySpellCheckerLanguages(session.fromPartition(partitionName), sessionData.spellLanguages);
+
+            console.log(`📝 Session ${sessionId} languages set to: ${sessionData.spellLanguages.join(', ')}`);
+            return { success: true, sessionData };
+        } catch (error) {
+            console.error('Error updating session languages:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
     setupBrowserViewEvents(view, sessionId, sessionName) {
         // Intercept AI Assistant keyboard shortcut at the Electron level
         // This fires before the page gets the event, so it can't be blocked
@@ -860,6 +924,43 @@ class MultiBrowserApp {
                 console.log(`[ai] Alt+${targetKey.toUpperCase()} intercepted for session ${sessionId}`);
                 event.preventDefault();
                 view.webContents.send('ai-toggle-toolbar');
+            }
+        });
+
+        // Native right-click menu: spelling suggestions for the misspelled word
+        // under the cursor, plus standard editing actions. Without this handler
+        // there is no context menu at all (Electron ships none by default).
+        view.webContents.on('context-menu', (event, params) => {
+            const menu = new Menu();
+
+            if (params.misspelledWord) {
+                for (const suggestion of params.dictionarySuggestions.slice(0, 6)) {
+                    menu.append(new MenuItem({
+                        label: suggestion,
+                        click: () => view.webContents.replaceMisspelling(suggestion)
+                    }));
+                }
+                if (params.dictionarySuggestions.length === 0) {
+                    menu.append(new MenuItem({ label: 'No spelling suggestions', enabled: false }));
+                }
+                menu.append(new MenuItem({
+                    label: `Add "${params.misspelledWord}" to dictionary`,
+                    click: () => view.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+                }));
+                menu.append(new MenuItem({ type: 'separator' }));
+            }
+
+            const ef = params.editFlags;
+            if (params.isEditable || params.selectionText) {
+                menu.append(new MenuItem({ role: 'cut', enabled: ef.canCut }));
+                menu.append(new MenuItem({ role: 'copy', enabled: ef.canCopy }));
+                menu.append(new MenuItem({ role: 'paste', enabled: ef.canPaste }));
+                menu.append(new MenuItem({ type: 'separator' }));
+                menu.append(new MenuItem({ role: 'selectAll' }));
+            }
+
+            if (menu.items.length > 0) {
+                menu.popup({ window: this.mainWindow });
             }
         });
 
@@ -1199,8 +1300,10 @@ class MultiBrowserApp {
                 provider: 'claude-cli',
                 claudeApiKey: '',
                 openaiApiKey: '',
+                openrouterApiKey: '',
                 claudeModel: 'claude-sonnet-4-6-20250514',
                 openaiModel: 'gpt-4o',
+                openrouterModel: 'openai/gpt-4o',
                 targetLanguage: 'English',
                 shortcut: 'Alt+H'
             };

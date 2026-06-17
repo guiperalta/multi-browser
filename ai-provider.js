@@ -129,6 +129,52 @@ class OpenAIAPIProvider {
     }
 }
 
+// OpenRouter Provider - OpenAI-compatible API gateway to many models
+// (Anthropic, OpenAI, Google, Meta, etc.) under a single key.
+class OpenRouterProvider {
+    constructor(settings = {}) {
+        this.apiKey = settings.openrouterApiKey || '';
+        this.model = settings.openrouterModel || 'openai/gpt-4o';
+    }
+
+    async sendRequest(action, text, options = {}) {
+        if (!this.apiKey) {
+            throw new Error('OpenRouter API key is not configured. Please set it in AI Settings.');
+        }
+
+        const { systemPrompt, userMessage } = buildPrompt(action, text, options);
+
+        const body = JSON.stringify({
+            model: this.model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage }
+            ],
+            max_tokens: 1024
+        });
+
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.apiKey}`,
+                // Optional attribution headers recommended by OpenRouter.
+                'HTTP-Referer': 'https://github.com/multi-browser',
+                'X-Title': 'Multi Browser'
+            },
+            body
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`OpenRouter API error (${response.status}): ${errorData.error?.message || response.statusText}`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content || '';
+    }
+}
+
 // Factory function to create the right provider based on settings
 function createProvider(settings = {}) {
     const provider = settings.provider || 'claude-cli';
@@ -140,9 +186,11 @@ function createProvider(settings = {}) {
             return new ClaudeAPIProvider(settings);
         case 'openai-api':
             return new OpenAIAPIProvider(settings);
+        case 'openrouter-api':
+            return new OpenRouterProvider(settings);
         default:
             return new ClaudeCLIProvider(settings);
     }
 }
 
-module.exports = { createProvider, ClaudeCLIProvider, ClaudeAPIProvider, OpenAIAPIProvider };
+module.exports = { createProvider, ClaudeCLIProvider, ClaudeAPIProvider, OpenAIAPIProvider, OpenRouterProvider };

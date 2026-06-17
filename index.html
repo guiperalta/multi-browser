@@ -96,7 +96,15 @@
                 </div>
                 <div class="form-group">
                     <label for="sessionUrl">Starting URL (optional):</label>
-                    <input type="url" id="sessionUrl" placeholder="https://example.com">
+                    <input type="url" id="sessionUrl" placeholder="https://example.com" list="urlSuggestions" autocomplete="off">
+                    <datalist id="urlSuggestions">
+                        <option value="https://web.whatsapp.com">WhatsApp Web</option>
+                        <option value="https://web.telegram.org/">Telegram Web</option>
+                    </datalist>
+                </div>
+                <div class="form-group">
+                    <label for="sessionLanguages">Spellcheck Languages (hold Ctrl/Cmd to select more):</label>
+                    <select id="sessionLanguages" class="form-select" multiple></select>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelSession">Cancel</button>
@@ -117,6 +125,10 @@
                 <div class="form-group">
                     <label for="newSessionName">New Session Name:</label>
                     <input type="text" id="newSessionName" placeholder="Enter new session name" required>
+                </div>
+                <div class="form-group">
+                    <label for="renameLanguages">Spellcheck Languages (hold Ctrl/Cmd to select more):</label>
+                    <select id="renameLanguages" class="form-select" multiple></select>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelRename">Cancel</button>
@@ -140,6 +152,7 @@
                         <option value="claude-cli">Claude CLI (No API key needed)</option>
                         <option value="claude-api">Claude API</option>
                         <option value="openai-api">OpenAI API</option>
+                        <option value="openrouter-api">OpenRouter</option>
                     </select>
                 </div>
                 <div class="form-group ai-api-field" id="claudeApiKeyGroup" style="display:none;">
@@ -157,6 +170,14 @@
                 <div class="form-group ai-api-field" id="openaiModelGroup" style="display:none;">
                     <label for="openaiModel">OpenAI Model:</label>
                     <input type="text" id="openaiModel" placeholder="gpt-4o">
+                </div>
+                <div class="form-group ai-api-field" id="openrouterApiKeyGroup" style="display:none;">
+                    <label for="openrouterApiKey">OpenRouter API Key:</label>
+                    <input type="password" id="openrouterApiKey" placeholder="sk-or-...">
+                </div>
+                <div class="form-group ai-api-field" id="openrouterModelGroup" style="display:none;">
+                    <label for="openrouterModel">OpenRouter Model:</label>
+                    <input type="text" id="openrouterModel" placeholder="openai/gpt-4o">
                 </div>
                 <div class="form-group">
                     <label for="aiTargetLanguage">Default Translation Language:</label>

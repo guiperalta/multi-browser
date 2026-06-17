@@ -8,11 +8,14 @@ class MultiBrowserUI {
         this.originalSessionNames = new Map(); // sessionId -> original user-defined name
         this.modalOpen = false;
         this.previousActiveTab = null;
+        this.availableLanguages = [];        // spellchecker locales reported by Electron
+        this.defaultLanguages = ['pt-BR', 'en-US']; // default selection for new sessions
         this.init();
     }
 
     init() {
         this.setupEventListeners();
+        this.loadAvailableLanguages();
         this.loadSessions();
 
         // Test if webview is supported
@@ -200,6 +203,9 @@ class MultiBrowserUI {
         modal.style.width = '100vw';
         modal.style.height = '100vh';
 
+        // New sessions default to PT + EN spellcheck (overridable per session).
+        this.populateLanguageSelect(document.getElementById('sessionLanguages'), this.defaultLanguages);
+
         // Force all form inputs to be accessible
         const nameInput = document.getElementById('sessionName');
         const urlInput = document.getElementById('sessionUrl');
@@ -285,9 +291,12 @@ class MultiBrowserUI {
         }
 
         try {
+            const spellLanguages = this.getSelectedLanguages(document.getElementById('sessionLanguages'));
+
             const result = await ipcRenderer.invoke('create-browser-session', {
                 name,
-                url: url
+                url: url,
+                spellLanguages: spellLanguages.length ? spellLanguages : this.defaultLanguages
             });
 
             if (result.success) {
@@ -964,6 +973,12 @@ class MultiBrowserUI {
         // Pre-fill with current name
         newSessionNameInput.value = sessionData.name;
 
+        // Pre-fill the spellcheck languages for this session
+        this.populateLanguageSelect(
+            document.getElementById('renameLanguages'),
+            sessionData.spellLanguages || this.defaultLanguages
+        );
+
         // Store the session ID in the form
         renameForm.dataset.sessionId = sessionId;
 
@@ -1018,8 +1033,14 @@ class MultiBrowserUI {
             return;
         }
 
+        const spellLanguages = this.getSelectedLanguages(document.getElementById('renameLanguages'));
+
         try {
             const result = await ipcRenderer.invoke('rename-session', sessionId, newName);
+
+            // Persist + apply the session's spellcheck languages (live, no reopen).
+            const langs = spellLanguages.length ? spellLanguages : this.defaultLanguages;
+            await ipcRenderer.invoke('update-session-languages', sessionId, langs);
 
             if (result.success) {
                 this.showNotification(`Session renamed to "${newName}"`, 'success');
@@ -1029,6 +1050,7 @@ class MultiBrowserUI {
                 const sessionData = this.sessions.get(sessionId);
                 if (sessionData) {
                     sessionData.name = newName;
+                    sessionData.spellLanguages = langs;
                     this.sessions.set(sessionId, sessionData);
                 }
 
@@ -1103,11 +1125,15 @@ class MultiBrowserUI {
         const claudeModelGroup = document.getElementById('claudeModelGroup');
         const openaiKeyGroup = document.getElementById('openaiApiKeyGroup');
         const openaiModelGroup = document.getElementById('openaiModelGroup');
+        const openrouterKeyGroup = document.getElementById('openrouterApiKeyGroup');
+        const openrouterModelGroup = document.getElementById('openrouterModelGroup');
 
         claudeKeyGroup.style.display = provider === 'claude-api' ? 'block' : 'none';
         claudeModelGroup.style.display = provider === 'claude-api' ? 'block' : 'none';
         openaiKeyGroup.style.display = provider === 'openai-api' ? 'block' : 'none';
         openaiModelGroup.style.display = provider === 'openai-api' ? 'block' : 'none';
+        openrouterKeyGroup.style.display = provider === 'openrouter-api' ? 'block' : 'none';
+        openrouterModelGroup.style.display = provider === 'openrouter-api' ? 'block' : 'none';
     }
 
     async showAISettingsModal() {
@@ -1131,6 +1157,8 @@ class MultiBrowserUI {
             document.getElementById('claudeModel').value = settings.claudeModel || 'claude-sonnet-4-6-20250514';
             document.getElementById('openaiApiKey').value = settings.openaiApiKey || '';
             document.getElementById('openaiModel').value = settings.openaiModel || 'gpt-4o';
+            document.getElementById('openrouterApiKey').value = settings.openrouterApiKey || '';
+            document.getElementById('openrouterModel').value = settings.openrouterModel || 'openai/gpt-4o';
             document.getElementById('aiTargetLanguage').value = settings.targetLanguage || 'English';
             document.getElementById('aiShortcut').value = settings.shortcut || 'Alt+H';
             this.updateAIProviderFields(settings.provider || 'claude-cli');
@@ -1167,8 +1195,10 @@ class MultiBrowserUI {
             provider: document.getElementById('aiProvider').value,
             claudeApiKey: document.getElementById('claudeApiKey').value,
             openaiApiKey: document.getElementById('openaiApiKey').value,
+            openrouterApiKey: document.getElementById('openrouterApiKey').value,
             claudeModel: document.getElementById('claudeModel').value || 'claude-sonnet-4-6-20250514',
             openaiModel: document.getElementById('openaiModel').value || 'gpt-4o',
+            openrouterModel: document.getElementById('openrouterModel').value || 'openai/gpt-4o',
             targetLanguage: document.getElementById('aiTargetLanguage').value || 'English',
             shortcut: document.getElementById('aiShortcut').value || 'Alt+H'
         };
@@ -1184,6 +1214,53 @@ class MultiBrowserUI {
         } catch (error) {
             this.showNotification(`Error: ${error.message}`, 'error');
         }
+    }
+
+    async loadAvailableLanguages() {
+        try {
+            const langs = await ipcRenderer.invoke('get-available-spellchecker-languages');
+            if (Array.isArray(langs) && langs.length) {
+                this.availableLanguages = langs;
+            }
+        } catch (error) {
+            console.log('Could not load spellchecker languages:', error);
+        }
+    }
+
+    languageLabel(code) {
+        const names = {
+            'pt-BR': 'Portuguese (Brazil)', 'pt-PT': 'Portuguese (Portugal)',
+            'en-US': 'English (US)', 'en-GB': 'English (UK)', 'en-AU': 'English (Australia)',
+            'en-CA': 'English (Canada)', 'es': 'Spanish', 'es-ES': 'Spanish (Spain)',
+            'es-419': 'Spanish (Latin America)', 'fr': 'French', 'fr-FR': 'French (France)',
+            'de': 'German', 'de-DE': 'German (Germany)', 'it': 'Italian', 'it-IT': 'Italian',
+            'nl': 'Dutch', 'ru': 'Russian', 'pl': 'Polish', 'sv': 'Swedish', 'tr': 'Turkish',
+            'ca': 'Catalan', 'cs': 'Czech', 'da': 'Danish', 'el': 'Greek', 'fa': 'Persian',
+            'hr': 'Croatian', 'hu': 'Hungarian', 'id': 'Indonesian', 'ko': 'Korean',
+            'lt': 'Lithuanian', 'lv': 'Latvian', 'nb': 'Norwegian', 'ro': 'Romanian',
+            'sk': 'Slovak', 'sl': 'Slovenian', 'sq': 'Albanian', 'sr': 'Serbian',
+            'ta': 'Tamil', 'uk': 'Ukrainian', 'vi': 'Vietnamese', 'hy': 'Armenian',
+            'bg': 'Bulgarian', 'et': 'Estonian', 'he': 'Hebrew', 'af': 'Afrikaans',
+            'cy': 'Welsh', 'fo': 'Faroese'
+        };
+        return names[code] ? `${names[code]} (${code})` : code;
+    }
+
+    populateLanguageSelect(selectEl, selected = []) {
+        if (!selectEl) return;
+        // Fall back to a common list if Electron reported nothing (e.g. macOS).
+        const codes = (this.availableLanguages && this.availableLanguages.length)
+            ? this.availableLanguages
+            : ['en-US', 'en-GB', 'pt-BR', 'pt-PT', 'es', 'fr', 'de', 'it', 'nl', 'ru', 'pl', 'sv', 'tr'];
+        selectEl.innerHTML = codes.map(code => {
+            const isSel = selected.includes(code) ? 'selected' : '';
+            return `<option value="${code}" ${isSel}>${this.escapeHtml(this.languageLabel(code))}</option>`;
+        }).join('');
+    }
+
+    getSelectedLanguages(selectEl) {
+        if (!selectEl) return [];
+        return Array.from(selectEl.selectedOptions).map(o => o.value);
     }
 
     escapeHtml(text) {
