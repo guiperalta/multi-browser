@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npx electron-builder --linux deb AppImage
+      - run: npx electron-builder --linux deb AppImage --publish never
       - uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npx electron-builder --win
+      - run: npx electron-builder --win --publish never
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
