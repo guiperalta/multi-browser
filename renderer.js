@@ -25,6 +25,8 @@ class MultiBrowserUI {
 
     init() {
         this.setupEventListeners();
+        this.setupThemeSwitch();
+        this.loadTheme();
         this.loadAvailableLanguages();
         this.loadAppVersion();
         this.loadSessions();
@@ -329,6 +331,40 @@ class MultiBrowserUI {
         }
     }
 
+    // ── Theme: 'system' (default) | 'light' | 'dark' ──
+    async loadTheme() {
+        let theme = 'system';
+        try {
+            theme = await ipcRenderer.invoke('get-ui-theme') || 'system';
+        } catch {
+            // Fall back to following the system.
+        }
+        this.applyTheme(theme);
+    }
+
+    applyTheme(theme) {
+        document.documentElement.dataset.theme = theme;
+        document.querySelectorAll('.theme-opt').forEach(btn => {
+            btn.setAttribute('aria-pressed', String(btn.dataset.themeChoice === theme));
+        });
+    }
+
+    setupThemeSwitch() {
+        const swtch = document.getElementById('themeSwitch');
+        if (!swtch) return;
+        swtch.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.theme-opt');
+            if (!btn) return;
+            const theme = btn.dataset.themeChoice;
+            this.applyTheme(theme);
+            try {
+                await ipcRenderer.invoke('save-ui-theme', theme);
+            } catch (error) {
+                console.error('Could not save theme:', error);
+            }
+        });
+    }
+
     async loadAppVersion() {
         try {
             const version = await ipcRenderer.invoke('get-app-version');
@@ -402,7 +438,7 @@ class MultiBrowserUI {
         const welcomeHtml = sessions.map((session, i) => `
             <article class="welcome-session-item" style="--i:${i}">
                 <div class="session-head">
-                    <span class="session-avatar">${this.escapeHtml((session.name || '?').trim().charAt(0))}</span>
+                    <span class="session-avatar" data-session-avatar="${session.id}">${this.avatarContent(session)}</span>
                     <div class="session-info">
                         <h4>${this.escapeHtml(session.name)}</h4>
                         <div class="session-url" title="${this.escapeHtml(session.url)}">${this.escapeHtml(this.prettyUrl(session.url))}</div>
@@ -724,6 +760,15 @@ class MultiBrowserUI {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
+    // Session cards show the site's favicon once we've seen one (stored by the
+    // main process on page-favicon-updated); until then, the name's initial.
+    avatarContent(session) {
+        const initial = this.escapeHtml((session.name || '?').trim().charAt(0));
+        if (!session.favicon) return initial;
+        return `<img src="${this.escapeHtml(session.favicon)}" alt=""
+            onerror="this.replaceWith(document.createTextNode('${initial.replace(/'/g, "\\'")}'))">`;
+    }
+
     // Cards show the host, not the whole URL — the full value stays in the title.
     prettyUrl(url) {
         try {
@@ -795,6 +840,15 @@ class MultiBrowserUI {
     }
 
     updateTabFavicon(sessionId, favicon) {
+        // Keep the home card in sync too — it shows the same favicon.
+        const session = this.sessions.get(sessionId);
+        if (session) {
+            session.favicon = favicon;
+            this.sessions.set(sessionId, session);
+            const avatar = document.querySelector(`[data-session-avatar="${sessionId}"]`);
+            if (avatar) avatar.innerHTML = this.avatarContent(session);
+        }
+
         const tab = this.activeTabs.get(sessionId);
         if (tab) {
             const titleSpan = tab.querySelector('.tab-title');

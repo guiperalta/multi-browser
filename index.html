@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="system">
 
 <head>
     <meta charset="UTF-8">
@@ -141,12 +141,46 @@
                                     <h3>Your sessions</h3>
                                     <span class="rule"></span>
                                     <span class="session-count" id="sessionCount"></span>
+                                    <div class="theme-switch" id="themeSwitch" role="group" aria-label="Theme">
+                                        <button type="button" class="theme-opt" data-theme-choice="system"
+                                            title="Match system" aria-pressed="true">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3.5" y="5" width="17" height="11.5" rx="2" />
+                                                <path d="M9 20h6" />
+                                                <path d="M12 16.5V20" />
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="theme-opt" data-theme-choice="light" title="Light"
+                                            aria-pressed="false">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="4" />
+                                                <path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.4 5.6l-1.4 1.4M7 17l-1.4 1.4M18.4 18.4L17 17M7 7L5.6 5.6" />
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="theme-opt" data-theme-choice="dark" title="Dark"
+                                            aria-pressed="false">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M20 14.5A8.2 8.2 0 019.5 4a8.5 8.5 0 1010.5 10.5z" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div id="welcomeSessionsContainer">
                                     <div class="loading">Loading sessions</div>
                                 </div>
                             </section>
+
                         </div>
+                        <footer class="home-foot">
+                            <svg class="spark" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3l1.9 5.4L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6L12 3z" />
+                            </svg>
+                            <span>Vibe coded by Guilherme Peralta — free to fork</span>
+                        </footer>
                     </div>
                 </div>
             </div>

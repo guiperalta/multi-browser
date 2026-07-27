@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage, Menu, MenuItem } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage, nativeTheme, Menu, MenuItem } = require('electron');
 
 // Default spellchecker languages for new sessions. Multi-language: each session
 // can override this with its own list (sessionData.spellLanguages).
@@ -210,6 +210,10 @@ class MultiBrowserApp {
             try {
                 app.setAppUserModelId('com.multibrowser.app');
             } catch { }
+
+            // Restore the saved UI theme so native chrome (menus, dialogs,
+            // form controls) matches the shell.
+            this.getUITheme().then(theme => { nativeTheme.themeSource = theme; }).catch(() => { });
 
             // Set app icon (important for Linux taskbar/dock)
             const icon = getIconNativeImage();
@@ -604,6 +608,11 @@ class MultiBrowserApp {
         });
 
         ipcMain.handle('get-app-version', () => app.getVersion());
+
+        // UI theme: 'system' | 'light' | 'dark'
+        ipcMain.handle('get-ui-theme', async () => this.getUITheme());
+
+        ipcMain.handle('save-ui-theme', async (event, theme) => this.saveUITheme(theme));
 
         // AI Assistant IPC handlers
         ipcMain.handle('ai-get-settings', async () => {
@@ -1120,6 +1129,9 @@ class MultiBrowserApp {
                 console.log(`🎯 Favicon updated for session ${sessionId}: ${favicons[0]}`);
                 // Send favicon update to renderer
                 this.mainWindow.webContents.send('page-favicon-updated', { sessionId, favicon: favicons[0] });
+                // Remember it so the home screen can show it before the
+                // session has been opened again.
+                this.saveSessionFavicon(sessionId, favicons[0]);
             }
         });
 
@@ -1336,6 +1348,37 @@ class MultiBrowserApp {
             return { success: true };
         } catch (error) {
             console.error('Error saving AI settings:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async saveSessionFavicon(sessionId, favicon) {
+        try {
+            const current = await db.getData(`/sessions/${sessionId}/favicon`).catch(() => null);
+            if (current === favicon) return;
+            await db.push(`/sessions/${sessionId}/favicon`, favicon);
+        } catch (error) {
+            console.log(`Could not store favicon for ${sessionId}: ${error.message}`);
+        }
+    }
+
+    async getUITheme() {
+        try {
+            return await db.getData('/ui-theme');
+        } catch {
+            return 'system';
+        }
+    }
+
+    async saveUITheme(theme) {
+        const allowed = ['system', 'light', 'dark'];
+        const clean = allowed.includes(theme) ? theme : 'system';
+        try {
+            await db.push('/ui-theme', clean);
+            nativeTheme.themeSource = clean;
+            return { success: true, theme: clean };
+        } catch (error) {
+            console.error('Error saving UI theme:', error);
             return { success: false, error: error.message };
         }
     }
