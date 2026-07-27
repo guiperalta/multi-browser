@@ -474,6 +474,90 @@ body {
     color: var(--ink);
 }
 
+/* Update row, tucked under the brand */
+
+.update-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: -18px 0 28px;
+    padding: 9px 12px;
+    border-radius: 11px;
+    border: 1px solid var(--hairline-soft);
+    background: var(--wash);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+}
+
+.update-row.has-update {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.update-row.failed {
+    border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+    color: var(--danger);
+    text-transform: none;
+    letter-spacing: 0.04em;
+}
+
+.update-status {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.update-bar {
+    flex: 1;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--hairline);
+    overflow: hidden;
+}
+
+.update-bar-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width 0.2s linear;
+}
+
+.update-action {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--hairline);
+    background: var(--wash);
+    color: inherit;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+.update-action:hover {
+    background: var(--wash-strong);
+}
+
+.update-action[disabled] {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.update-row.has-update .update-action {
+    border-color: var(--accent-line);
+    color: var(--accent);
+}
+
 .home-headline {
     font-size: clamp(30px, 3.4vw, 44px);
     line-height: 1.06;

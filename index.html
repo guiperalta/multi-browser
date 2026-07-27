@@ -51,6 +51,14 @@
                                     </div>
                                 </div>
 
+                                <div class="update-row" id="updateRow">
+                                    <span class="update-status" id="updateStatus">Updates</span>
+                                    <div class="update-bar" id="updateBar" hidden>
+                                        <span class="update-bar-fill" id="updateBarFill"></span>
+                                    </div>
+                                    <button type="button" class="update-action" id="updateAction">Check</button>
+                                </div>
+
                                 <h2 class="home-headline">Many accounts.<br>One window.<br><em>Zero crossover.</em>
                                 </h2>
                                 <p class="home-lede">
@@ -304,6 +312,12 @@
                     <input type="text" id="aiShortcut" placeholder="Alt+H" readonly
                         style="cursor:pointer; caret-color:transparent;">
                     <small class="form-hint">Click the field and press a key — it is combined with Alt.</small>
+                </div>
+                <div class="form-group">
+                    <label for="githubToken">GitHub token <span style="text-transform:none;">(updates)</span></label>
+                    <input type="password" id="githubToken" placeholder="ghp_… — only needed while the repo is private">
+                    <small class="form-hint">Used to read releases when checking for updates. Read-only access is
+                        enough; leave empty once the repository is public.</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelAISettings">Cancel</button>

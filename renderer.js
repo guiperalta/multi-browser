@@ -27,6 +27,7 @@ class MultiBrowserUI {
         this.setupEventListeners();
         this.setupThemeSwitch();
         this.loadTheme();
+        this.setupUpdates();
         this.loadAvailableLanguages();
         this.loadAppVersion();
         this.loadSessions();
@@ -328,6 +329,103 @@ class MultiBrowserUI {
             }
         } catch (error) {
             this.showNotification(`Error creating session: ${error.message}`, 'error');
+        }
+    }
+
+    // ── Updates ──
+    // One row, four states: idle → available → downloading → ready to install.
+    setupUpdates() {
+        const row = document.getElementById('updateRow');
+        const action = document.getElementById('updateAction');
+        if (!row || !action) return;
+
+        this.updateState = 'idle';
+
+        ipcRenderer.on('updates-progress', ({ percent }) => {
+            const fill = document.getElementById('updateBarFill');
+            if (fill) fill.style.width = `${percent}%`;
+        });
+
+        action.addEventListener('click', () => this.runUpdateAction());
+
+        // Quiet check on launch: only speaks up when something is waiting.
+        setTimeout(() => this.checkForUpdates({ silent: true }), 4000);
+    }
+
+    setUpdateUI({ status, button, state, progress = false, disabled = false }) {
+        const row = document.getElementById('updateRow');
+        const statusEl = document.getElementById('updateStatus');
+        const actionEl = document.getElementById('updateAction');
+        const barEl = document.getElementById('updateBar');
+        if (!row) return;
+
+        if (state) this.updateState = state;
+        statusEl.textContent = status;
+        statusEl.hidden = progress;
+        barEl.hidden = !progress;
+        actionEl.textContent = button;
+        actionEl.disabled = disabled;
+        row.classList.toggle('has-update', state === 'available' || state === 'ready');
+        row.classList.toggle('failed', state === 'error');
+    }
+
+    async runUpdateAction() {
+        if (this.updateState === 'available') return this.downloadUpdate();
+        if (this.updateState === 'ready') return this.installUpdate();
+        if (this.updateState === 'manual') return ipcRenderer.invoke('updates-open-release');
+        return this.checkForUpdates({ silent: false });
+    }
+
+    async checkForUpdates({ silent }) {
+        if (!silent) this.setUpdateUI({ status: 'Checking…', button: 'Check', disabled: true, state: 'checking' });
+
+        const result = await ipcRenderer.invoke('updates-check');
+
+        if (!result.success) {
+            if (silent) return;
+            this.setUpdateUI({ status: `Check failed: ${result.error}`, button: 'Retry', state: 'error' });
+            return;
+        }
+
+        if (!result.available) {
+            if (silent) return;
+            this.setUpdateUI({ status: `Up to date · v${result.currentVersion}`, button: 'Check', state: 'idle' });
+            return;
+        }
+
+        if (!result.installable) {
+            // dev build, or no artifact for this platform — point at the release.
+            this.setUpdateUI({ status: `v${result.latestVersion} available`, button: 'View', state: 'manual' });
+            return;
+        }
+
+        this.setUpdateUI({ status: `v${result.latestVersion} available`, button: 'Download', state: 'available' });
+    }
+
+    async downloadUpdate() {
+        this.setUpdateUI({ status: 'Downloading', button: 'Download', progress: true, disabled: true, state: 'downloading' });
+        const result = await ipcRenderer.invoke('updates-download');
+
+        if (!result.success) {
+            this.setUpdateUI({ status: `Download failed: ${result.error}`, button: 'Retry', state: 'error' });
+            return;
+        }
+        this.setUpdateUI({ status: 'Update ready', button: 'Install', state: 'ready' });
+    }
+
+    async installUpdate() {
+        this.setUpdateUI({ status: 'Installing…', button: 'Install', disabled: true, state: 'installing' });
+        const result = await ipcRenderer.invoke('updates-install');
+
+        if (!result.success) {
+            this.setUpdateUI({ status: result.error, button: 'Retry', state: 'error' });
+            this.updateState = 'ready';
+            return;
+        }
+        if (result.quitting) {
+            this.setUpdateUI({ status: 'Restarting…', button: 'Install', disabled: true, state: 'installing' });
+        } else {
+            this.setUpdateUI({ status: 'Installer opened', button: 'Check', state: 'idle' });
         }
     }
 
@@ -1251,6 +1349,7 @@ class MultiBrowserUI {
             document.getElementById('openrouterModel').value = settings.openrouterModel || 'openai/gpt-4o';
             document.getElementById('aiTargetLanguage').value = settings.targetLanguage || 'English';
             document.getElementById('aiShortcut').value = settings.shortcut || 'Alt+H';
+            document.getElementById('githubToken').value = settings.githubToken || '';
             this.updateAIProviderFields(settings.provider || 'claude-cli');
         } catch (err) {
             console.log('Could not load AI settings:', err);
@@ -1290,7 +1389,8 @@ class MultiBrowserUI {
             openaiModel: document.getElementById('openaiModel').value || 'gpt-4o',
             openrouterModel: document.getElementById('openrouterModel').value || 'openai/gpt-4o',
             targetLanguage: document.getElementById('aiTargetLanguage').value || 'English',
-            shortcut: document.getElementById('aiShortcut').value || 'Alt+H'
+            shortcut: document.getElementById('aiShortcut').value || 'Alt+H',
+            githubToken: document.getElementById('githubToken').value.trim()
         };
 
         try {

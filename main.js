@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
 const { createProvider } = require('./ai-provider');
+const updater = require('./updater');
 
 const LINUX_DESKTOP_NAME = 'multi-browser.desktop';
 const LINUX_WM_CLASS = path.basename(LINUX_DESKTOP_NAME, '.desktop');
@@ -148,6 +149,7 @@ class MultiBrowserApp {
         this.activeNotifications = new Map(); // sessionId -> notification objects
         this.recentlyOpenedFolders = new Set(); // Track folders that were recently opened
         this.pendingSessionNavigations = new Map(); // sessionId -> URL to load once the view is created
+        this.pendingUpdate = null; // release info from the last successful update check
         this.init();
     }
 
@@ -608,6 +610,47 @@ class MultiBrowserApp {
         });
 
         ipcMain.handle('get-app-version', () => app.getVersion());
+
+        // ── Updates (GitHub Releases) ──
+        ipcMain.handle('updates-check', async () => {
+            try {
+                const info = await updater.checkForUpdate(await this.getGithubToken());
+                this.pendingUpdate = info.installable ? info : null;
+                return { success: true, ...info };
+            } catch (error) {
+                console.error('Update check failed:', error.message);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.handle('updates-download', async (event) => {
+            if (!this.pendingUpdate) return { success: false, error: 'No update to download.' };
+            try {
+                const filePath = await updater.downloadAsset(this.pendingUpdate.asset, (progress) => {
+                    try {
+                        event.sender.send('updates-progress', progress);
+                    } catch { }
+                }, await this.getGithubToken());
+                this.pendingUpdate.filePath = filePath;
+                return { success: true, filePath };
+            } catch (error) {
+                console.error('Update download failed:', error.message);
+                return { success: false, error: error.message };
+            }
+        });
+
+        ipcMain.handle('updates-install', async () => {
+            if (!this.pendingUpdate || !this.pendingUpdate.filePath) {
+                return { success: false, error: 'Nothing downloaded yet.' };
+            }
+            return updater.installUpdate(this.pendingUpdate.filePath, this.pendingUpdate.format);
+        });
+
+        ipcMain.handle('updates-open-release', async () => {
+            const url = this.pendingUpdate?.releaseUrl || `https://github.com/guiperalta/multi-browser/releases/latest`;
+            await shell.openExternal(url);
+            return { success: true };
+        });
 
         // UI theme: 'system' | 'light' | 'dark'
         ipcMain.handle('get-ui-theme', async () => this.getUITheme());
@@ -1380,6 +1423,16 @@ class MultiBrowserApp {
         } catch (error) {
             console.error('Error saving UI theme:', error);
             return { success: false, error: error.message };
+        }
+    }
+
+    // Optional: only needed while the repo is private.
+    async getGithubToken() {
+        try {
+            const settings = await this.getAISettings();
+            return (settings.githubToken || '').trim() || null;
+        } catch {
+            return null;
         }
     }
 
