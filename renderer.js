@@ -1,5 +1,15 @@
 const { ipcRenderer } = require('electron');
 
+// Inline stroke icons, matching the set used by the in-page AI overlay.
+const ICONS = {
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5h6v6"/><path d="M19 5l-8 8"/><path d="M18.5 14.5V18a1.5 1.5 0 01-1.5 1.5H6A1.5 1.5 0 014.5 18V7A1.5 1.5 0 016 5.5h3.5"/></svg>',
+    pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z"/><path d="M14.5 6.5l3 3"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14"/><path d="M9.5 7V5.5h5V7"/><path d="M6.5 7l.8 12.2a1.3 1.3 0 001.3 1.3h6.8a1.3 1.3 0 001.3-1.3L17.5 7"/><path d="M10.5 11v6M13.5 11v6"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.2 2.4 3.3 5.3 3.3 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.3-5.3-3.3-8.5S9.8 5.9 12 3.5z"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5"/><path d="M12 16.2v.2"/></svg>'
+};
+
 class MultiBrowserUI {
     constructor() {
         this.activeTabs = new Map(); // sessionId -> tab element
@@ -16,6 +26,7 @@ class MultiBrowserUI {
     init() {
         this.setupEventListeners();
         this.loadAvailableLanguages();
+        this.loadAppVersion();
         this.loadSessions();
 
         // Test if webview is supported
@@ -212,15 +223,12 @@ class MultiBrowserUI {
         const allInputs = [nameInput, urlInput].filter(Boolean);
 
         allInputs.forEach(input => {
-            // Force maximum z-index and ensure accessibility
+            // Keep the fields reachable above the browser view; appearance is
+            // left to the stylesheet.
             input.style.cssText = `
                 z-index: 2147483647 !important;
                 pointer-events: all !important;
                 position: relative !important;
-                background: white !important;
-                border: 2px solid #e1e5e9 !important;
-                opacity: 1 !important;
-                visibility: visible !important;
             `;
             input.disabled = false;
             input.readOnly = false;
@@ -321,9 +329,19 @@ class MultiBrowserUI {
         }
     }
 
+    async loadAppVersion() {
+        try {
+            const version = await ipcRenderer.invoke('get-app-version');
+            const label = document.getElementById('appVersionLabel');
+            if (label && version) label.textContent = `Multi Browser v${version}`;
+        } catch {
+            // Label keeps its static fallback text.
+        }
+    }
+
     async loadSessions() {
         const container = document.getElementById('welcomeSessionsContainer');
-        container.innerHTML = '<div class="loading">Loading sessions...</div>';
+        container.innerHTML = '<div class="loading">Loading sessions</div>';
 
         try {
             const sessions = await ipcRenderer.invoke('get-sessions');
@@ -351,12 +369,18 @@ class MultiBrowserUI {
 
     renderSessions(sessions) {
         const welcomeContainer = document.getElementById('welcomeSessionsContainer');
+        const countEl = document.getElementById('sessionCount');
+        if (countEl) {
+            countEl.textContent = sessions.length
+                ? `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'}`
+                : '';
+        }
 
         if (sessions.length === 0) {
             const emptyState = `
                 <div class="empty-state">
                     <h3>No sessions yet</h3>
-                    <p>Create your first browser session to get started!</p>
+                    <p>Create one to get an isolated browser with its own cookies and logins.</p>
                 </div>
             `;
             welcomeContainer.innerHTML = emptyState;
@@ -375,33 +399,39 @@ class MultiBrowserUI {
         sessions.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
 
         // Generate welcome tab sessions (expanded view with more actions)
-        const welcomeHtml = sessions.map(session => `
-            <div class="welcome-session-item">
-                <div class="session-info">
-                    <h4>${this.escapeHtml(session.name)}</h4>
-                    <div class="session-url">${this.escapeHtml(session.url)}</div>
-                    <div class="session-meta">
-                        Created: ${this.formatDate(session.created)} | Last accessed: ${this.formatDate(session.lastAccessed)}
+        const welcomeHtml = sessions.map((session, i) => `
+            <article class="welcome-session-item" style="--i:${i}">
+                <div class="session-head">
+                    <span class="session-avatar">${this.escapeHtml((session.name || '?').trim().charAt(0))}</span>
+                    <div class="session-info">
+                        <h4>${this.escapeHtml(session.name)}</h4>
+                        <div class="session-url" title="${this.escapeHtml(session.url)}">${this.escapeHtml(this.prettyUrl(session.url))}</div>
                     </div>
                 </div>
+                <dl class="session-meta">
+                    <div><dt>Created</dt><dd>${this.formatDate(session.created)}</dd></div>
+                    <div><dt>Last used</dt><dd>${this.formatDate(session.lastAccessed)}</dd></div>
+                </dl>
                 <div class="session-actions">
                     <label class="auto-open-toggle" title="Automatically open this session on startup">
-                        <input type="checkbox" 
-                            ${session.autoOpen ? 'checked' : ''} 
+                        <input type="checkbox"
+                            ${session.autoOpen ? 'checked' : ''}
                             onchange="ui.toggleAutoOpen('${session.id}', this.checked)">
-                        Auto Open
+                        <span class="track"></span>
+                        Auto open
                     </label>
+                    <span class="spacer"></span>
                     <button class="btn btn-primary btn-small" onclick="ui.openSessionTab('${session.id}')">
-                        🌐 Open
+                        ${ICONS.open} Open
                     </button>
-                    <button class="btn btn-secondary btn-small" onclick="ui.showRenameModal('${session.id}')">
-                        ✏️ Rename
+                    <button class="icon-btn" title="Rename" onclick="ui.showRenameModal('${session.id}')">
+                        ${ICONS.pen}
                     </button>
-                    <button class="btn btn-danger btn-small" onclick="ui.deleteSession('${session.id}')">
-                        🗑️ Delete
+                    <button class="icon-btn danger" title="Delete" onclick="ui.deleteSession('${session.id}')">
+                        ${ICONS.trash}
                     </button>
                 </div>
-            </div>
+            </article>
         `).join('');
 
         // Update both containers
@@ -478,11 +508,13 @@ class MultiBrowserUI {
         tab.dataset.tabId = sessionData.id;
         tab.innerHTML = `
             <span class="tab-title">${this.escapeHtml(sessionData.name)}</span>
-            <button class="tab-close" onclick="ui.closeTab('${sessionData.id}')" title="Close tab">×</button>
+            <button class="tab-close" onclick="ui.closeTab('${sessionData.id}')" title="Close tab">${ICONS.close}</button>
         `;
 
         tab.addEventListener('click', (e) => {
-            if (!e.target.classList.contains('tab-close')) {
+            // closest(): the close button holds an <svg>, so the click target
+            // is usually a path inside it, not the button itself.
+            if (!e.target.closest('.tab-close')) {
                 this.switchToTab(sessionData.id);
             }
         });
@@ -502,10 +534,10 @@ class MultiBrowserUI {
         const browserContainer = document.createElement('div');
         browserContainer.className = 'browser-container';
         browserContainer.innerHTML = `
-            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #f5f5f5;">
-                <div style="font-size: 24px; margin-bottom: 10px;">🌐</div>
-                <div>${sessionData.name}</div>
-                <div style="font-size: 12px; color: #666; margin-top: 5px;">${sessionData.url}</div>
+            <div class="view-placeholder">
+                <div class="ph-mark">${ICONS.globe}</div>
+                <div class="ph-name">${this.escapeHtml(sessionData.name)}</div>
+                <div class="ph-sub">${this.escapeHtml(sessionData.url)}</div>
             </div>
         `;
 
@@ -522,11 +554,12 @@ class MultiBrowserUI {
         } else {
             console.error(`❌ Failed to create browser view: `, result.error);
             browserContainer.innerHTML = `
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: #f5f5f5;">
-                    <div style="font-size: 24px; margin-bottom: 10px;">⚠️</div>
-                    <div>Failed to load ${sessionData.name}</div>
-                    <div style="font-size: 12px; color: #666; margin-top: 5px;">Error: ${result.error}</div>
-                    <button onclick="ui.retryBrowserView('${sessionData.id}')" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button>
+                <div class="view-placeholder">
+                    <div class="ph-mark" style="color: var(--danger); border-color: rgba(226,112,95,.3);">${ICONS.alert}</div>
+                    <div class="ph-name">Failed to load ${this.escapeHtml(sessionData.name)}</div>
+                    <div class="ph-sub">${this.escapeHtml(String(result.error))}</div>
+                    <button class="btn btn-secondary btn-small" style="margin-top:12px"
+                        onclick="ui.retryBrowserView('${sessionData.id}')">Retry</button>
                 </div>
             `;
         }
@@ -691,6 +724,16 @@ class MultiBrowserUI {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
 
+    // Cards show the host, not the whole URL — the full value stays in the title.
+    prettyUrl(url) {
+        try {
+            const u = new URL(url);
+            return (u.hostname + (u.pathname === '/' ? '' : u.pathname)).replace(/^www\./, '');
+        } catch {
+            return url || 'about:blank';
+        }
+    }
+
     async retryBrowserView(sessionId) {
         const sessionData = this.sessions.get(sessionId);
 
@@ -766,7 +809,6 @@ class MultiBrowserUI {
                 const faviconImg = document.createElement('img');
                 faviconImg.src = favicon;
                 faviconImg.className = 'tab-favicon';
-                faviconImg.style.cssText = 'width: 16px; height: 16px; margin-right: 6px; border-radius: 2px;';
 
                 // Handle favicon load error
                 faviconImg.onerror = () => {
@@ -982,14 +1024,8 @@ class MultiBrowserUI {
         // Store the session ID in the form
         renameForm.dataset.sessionId = sessionId;
 
-        // Force modal visibility
-        renameModal.style.cssText = `
-        display: flex!important;
-        position: fixed!important;
-        z - index: 2147483647!important;
-        pointer - events: all!important;
-        background: rgba(0, 0, 0, 0.5)!important;
-        `;
+        // Force modal visibility (styling comes from styles.css)
+        renameModal.style.cssText = 'display: flex !important; position: fixed !important;';
         renameModal.classList.add('show');
 
         console.log('🔧 Rename modal should be visible now');

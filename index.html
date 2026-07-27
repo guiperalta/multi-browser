@@ -15,12 +15,24 @@
             <!-- Tab bar -->
             <div class="tab-bar">
                 <div class="tabs-container" id="tabsContainer">
-                    <div class="welcome-tab tab active" data-tab-id="welcome">
-                        <span class="tab-title">🏠</span>
+                    <div class="welcome-tab tab active" data-tab-id="welcome" title="Home">
+                        <span class="tab-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 10.5L12 4l8 6.5" />
+                                <path d="M6 9.8V19h12V9.8" />
+                                <path d="M10 19v-5h4v5" />
+                            </svg>
+                        </span>
                     </div>
                 </div>
                 <div class="tab-actions">
-                    <button id="newTabBtn" class="btn btn-small">➕</button>
+                    <button id="newTabBtn" class="icon-btn" title="New session">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -28,48 +40,112 @@
             <div class="content-area">
                 <!-- Welcome screen -->
                 <div class="tab-content active" id="tab-welcome">
-                    <div class="welcome-screen">
-                        <img src="assets/logo-high-res.png" alt="Multi Browser Manager" style="max-width:250px; margin: 0 auto 20px auto;" class="welcome-logo">
-                        <h2>Welcome to Multi Browser Manager</h2>
-                        <p>Create and manage multiple isolated browser sessions in one window.</p>
+                    <div class="home">
+                        <div class="home-inner">
+                            <aside class="home-aside">
+                                <div class="brand">
+                                    <img class="brand-mark" src="assets/logo-high-res.png" alt="">
+                                    <div class="brand-text">
+                                        <p class="eyebrow" id="appVersionLabel">Multi Browser</p>
+                                        <h1>Session Manager</h1>
+                                    </div>
+                                </div>
 
-                        <div class="quick-actions">
-                            <button class="btn btn-primary" id="createFirstSession">
-                                🚀 Create Session
-                            </button>
-                            <button class="btn btn-secondary" id="openAISettings">
-                                &#10024; AI Settings
-                            </button>
-                        </div>
+                                <h2 class="home-headline">Many accounts.<br>One window.<br><em>Zero crossover.</em>
+                                </h2>
+                                <p class="home-lede">
+                                    Every session runs in its own storage partition — separate cookies, separate
+                                    logins, separate everything. Stay signed into five accounts of the same site at
+                                    once.
+                                </p>
 
-                        <div class="welcome-sessions-section">
-                            <h3>Your Sessions</h3>
-                            <div id="welcomeSessionsContainer">
-                                <div class="loading">Loading sessions...</div>
-                            </div>
-                        </div>
+                                <div class="quick-actions">
+                                    <button class="btn btn-primary" id="createFirstSession">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round">
+                                            <path d="M12 5v14M5 12h14" />
+                                        </svg>
+                                        New session
+                                    </button>
+                                    <button class="btn btn-secondary" id="openAISettings">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 3l1.9 5.4L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6L12 3z" />
+                                            <path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" />
+                                        </svg>
+                                        AI settings
+                                    </button>
+                                </div>
 
-                        <div class="features">
-                            <div class="feature">
-                                <h3>🔒 Isolated Sessions</h3>
-                                <p>Each session has separate cookies, storage, and login states</p>
-                            </div>
-                            <div class="feature">
-                                <h3>💾 Persistent Data</h3>
-                                <p>Sessions are saved and restored between app restarts</p>
-                            </div>
-                            <div class="feature">
-                                <h3>⚡ Fast Switching</h3>
-                                <p>Quickly switch between different browser sessions</p>
-                            </div>
-                            <div class="feature">
-                                <h3>🌐 Smart Link Handling</h3>
-                                <p>External links (target="_blank") open in your system browser</p>
-                            </div>
-                            <div class="feature">
-                                <h3>&#10024; AI Assistant</h3>
-                                <p>Review, translate, reply and summarize messages with AI (Alt+H)</p>
-                            </div>
+                                <div class="home-facts">
+                                    <div class="home-fact">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.5" />
+                                            <path d="M8 10.5V7.8a4 4 0 018 0v2.7" />
+                                        </svg>
+                                        <div>
+                                            <h3>Isolated sessions</h3>
+                                            <p>Separate cookies, storage and login state per session.</p>
+                                        </div>
+                                    </div>
+                                    <div class="home-fact">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M5 7.5C5 5.6 8.1 4 12 4s7 1.6 7 3.5-3.1 3.5-7 3.5-7-1.6-7-3.5z" />
+                                            <path d="M5 7.5v9c0 1.9 3.1 3.5 7 3.5s7-1.6 7-3.5v-9" />
+                                            <path d="M5 12c0 1.9 3.1 3.5 7 3.5s7-1.6 7-3.5" />
+                                        </svg>
+                                        <div>
+                                            <h3>Persistent by default</h3>
+                                            <p>Partitions live on disk, so logins survive restarts.</p>
+                                        </div>
+                                    </div>
+                                    <div class="home-fact">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M13 3L5.5 13.5H12L11 21l7.5-10.5H12L13 3z" />
+                                        </svg>
+                                        <div>
+                                            <h3>Fast switching</h3>
+                                            <p>Tabs across the top; notifications jump you to the right one.</p>
+                                        </div>
+                                    </div>
+                                    <div class="home-fact">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M10.5 13.5a4 4 0 006 .5l2.5-2.5a4.2 4.2 0 00-6-6L11.5 7" />
+                                            <path d="M13.5 10.5a4 4 0 00-6-.5L5 12.5a4.2 4.2 0 006 6L12.5 17" />
+                                        </svg>
+                                        <div>
+                                            <h3>Smart links</h3>
+                                            <p>External links open outside; wa.me links land in WhatsApp.</p>
+                                        </div>
+                                    </div>
+                                    <div class="home-fact">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                                            stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 3l1.9 5.4L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6L12 3z" />
+                                        </svg>
+                                        <div>
+                                            <h3>AI assistant</h3>
+                                            <p>Review, translate, reply, summarize — Alt+H in any session.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </aside>
+
+                            <section class="welcome-sessions-section">
+                                <div class="section-head">
+                                    <span class="dot"></span>
+                                    <h3>Your sessions</h3>
+                                    <span class="rule"></span>
+                                    <span class="session-count" id="sessionCount"></span>
+                                </div>
+                                <div id="welcomeSessionsContainer">
+                                    <div class="loading">Loading sessions</div>
+                                </div>
+                            </section>
                         </div>
                     </div>
                 </div>
@@ -86,29 +162,32 @@
     <div id="sessionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Create New Session</h2>
+                <span class="dot"></span>
+                <h2>New session</h2>
                 <button class="modal-close" id="closeModal">&times;</button>
             </div>
             <form id="createSessionForm">
                 <div class="form-group">
-                    <label for="sessionName">Session Name:</label>
-                    <input type="text" id="sessionName" placeholder="e.g., Work Account, Personal, Testing" required>
+                    <label for="sessionName">Session name</label>
+                    <input type="text" id="sessionName" placeholder="Work account, Personal, Testing…" required>
                 </div>
                 <div class="form-group">
-                    <label for="sessionUrl">Starting URL (optional):</label>
-                    <input type="url" id="sessionUrl" placeholder="https://example.com" list="urlSuggestions" autocomplete="off">
+                    <label for="sessionUrl">Starting URL <span style="text-transform:none;">(optional)</span></label>
+                    <input type="url" id="sessionUrl" placeholder="https://example.com" list="urlSuggestions"
+                        autocomplete="off">
                     <datalist id="urlSuggestions">
                         <option value="https://web.whatsapp.com">WhatsApp Web</option>
                         <option value="https://web.telegram.org/">Telegram Web</option>
                     </datalist>
                 </div>
                 <div class="form-group">
-                    <label for="sessionLanguages">Spellcheck Languages (hold Ctrl/Cmd to select more):</label>
+                    <label for="sessionLanguages">Spellcheck languages</label>
                     <select id="sessionLanguages" class="form-select" multiple></select>
+                    <small class="form-hint">Hold Ctrl / Cmd to select more than one.</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelSession">Cancel</button>
-                    <button type="submit" class="btn btn-primary">🚀 Create Session</button>
+                    <button type="submit" class="btn btn-primary">Create session</button>
                 </div>
             </form>
         </div>
@@ -118,21 +197,23 @@
     <div id="renameModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Rename Session</h2>
+                <span class="dot"></span>
+                <h2>Edit session</h2>
                 <button class="modal-close" id="closeRenameModal">&times;</button>
             </div>
             <form id="renameSessionForm">
                 <div class="form-group">
-                    <label for="newSessionName">New Session Name:</label>
+                    <label for="newSessionName">Session name</label>
                     <input type="text" id="newSessionName" placeholder="Enter new session name" required>
                 </div>
                 <div class="form-group">
-                    <label for="renameLanguages">Spellcheck Languages (hold Ctrl/Cmd to select more):</label>
+                    <label for="renameLanguages">Spellcheck languages</label>
                     <select id="renameLanguages" class="form-select" multiple></select>
+                    <small class="form-hint">Hold Ctrl / Cmd to select more than one.</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelRename">Cancel</button>
-                    <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
                 </div>
             </form>
         </div>
@@ -140,58 +221,59 @@
 
     <!-- AI Settings Modal -->
     <div id="aiSettingsModal" class="modal">
-        <div class="modal-content" style="max-width: 550px;">
+        <div class="modal-content" style="max-width: 560px;">
             <div class="modal-header">
-                <h2>&#10024; AI Settings</h2>
+                <span class="dot"></span>
+                <h2>AI assistant</h2>
                 <button class="modal-close" id="closeAISettings">&times;</button>
             </div>
             <form id="aiSettingsForm">
                 <div class="form-group">
-                    <label for="aiProvider">AI Provider:</label>
+                    <label for="aiProvider">Provider</label>
                     <select id="aiProvider" class="form-select">
-                        <option value="claude-cli">Claude CLI (No API key needed)</option>
+                        <option value="claude-cli">Claude CLI (no API key needed)</option>
                         <option value="claude-api">Claude API</option>
                         <option value="openai-api">OpenAI API</option>
                         <option value="openrouter-api">OpenRouter</option>
                     </select>
                 </div>
                 <div class="form-group ai-api-field" id="claudeApiKeyGroup" style="display:none;">
-                    <label for="claudeApiKey">Claude API Key:</label>
+                    <label for="claudeApiKey">Claude API key</label>
                     <input type="password" id="claudeApiKey" placeholder="sk-ant-...">
                 </div>
                 <div class="form-group ai-api-field" id="claudeModelGroup" style="display:none;">
-                    <label for="claudeModel">Claude Model:</label>
+                    <label for="claudeModel">Claude model</label>
                     <input type="text" id="claudeModel" placeholder="claude-sonnet-4-6-20250514">
                 </div>
                 <div class="form-group ai-api-field" id="openaiApiKeyGroup" style="display:none;">
-                    <label for="openaiApiKey">OpenAI API Key:</label>
+                    <label for="openaiApiKey">OpenAI API key</label>
                     <input type="password" id="openaiApiKey" placeholder="sk-...">
                 </div>
                 <div class="form-group ai-api-field" id="openaiModelGroup" style="display:none;">
-                    <label for="openaiModel">OpenAI Model:</label>
+                    <label for="openaiModel">OpenAI model</label>
                     <input type="text" id="openaiModel" placeholder="gpt-4o">
                 </div>
                 <div class="form-group ai-api-field" id="openrouterApiKeyGroup" style="display:none;">
-                    <label for="openrouterApiKey">OpenRouter API Key:</label>
+                    <label for="openrouterApiKey">OpenRouter API key</label>
                     <input type="password" id="openrouterApiKey" placeholder="sk-or-...">
                 </div>
                 <div class="form-group ai-api-field" id="openrouterModelGroup" style="display:none;">
-                    <label for="openrouterModel">OpenRouter Model:</label>
+                    <label for="openrouterModel">OpenRouter model</label>
                     <input type="text" id="openrouterModel" placeholder="openai/gpt-4o">
                 </div>
                 <div class="form-group">
-                    <label for="aiTargetLanguage">Default Translation Language:</label>
+                    <label for="aiTargetLanguage">Default translation language</label>
                     <input type="text" id="aiTargetLanguage" placeholder="English">
                 </div>
                 <div class="form-group">
-                    <label for="aiShortcut">Keyboard Shortcut:</label>
+                    <label for="aiShortcut">Keyboard shortcut</label>
                     <input type="text" id="aiShortcut" placeholder="Alt+H" readonly
                         style="cursor:pointer; caret-color:transparent;">
-                    <small style="color:#888; display:block; margin-top:4px;">Click the field and press a key (will be combined with Alt)</small>
+                    <small class="form-hint">Click the field and press a key — it is combined with Alt.</small>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" id="cancelAISettings">Cancel</button>
-                    <button type="submit" class="btn btn-primary">&#128190; Save Settings</button>
+                    <button type="submit" class="btn btn-primary">Save settings</button>
                 </div>
             </form>
         </div>

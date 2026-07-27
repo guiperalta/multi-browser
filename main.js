@@ -603,6 +603,8 @@ class MultiBrowserApp {
             }
         });
 
+        ipcMain.handle('get-app-version', () => app.getVersion());
+
         // AI Assistant IPC handlers
         ipcMain.handle('ai-get-settings', async () => {
             return this.getAISettings();
