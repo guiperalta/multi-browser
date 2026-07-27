@@ -615,6 +615,15 @@ class MultiBrowserApp {
         ipcMain.handle('ai-request', async (event, { action, text }) => {
             return this.handleAIRequest(action, text);
         });
+
+        // Floating AI button position (shared by every session view)
+        ipcMain.handle('ai-get-fab-position', async () => {
+            return this.getAIFabPosition();
+        });
+
+        ipcMain.handle('ai-save-fab-position', async (event, pos) => {
+            return this.saveAIFabPosition(pos, event.sender);
+        });
     }
 
     async createBrowserSession(config) {
@@ -1325,6 +1334,38 @@ class MultiBrowserApp {
             return { success: true };
         } catch (error) {
             console.error('Error saving AI settings:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async getAIFabPosition() {
+        try {
+            return await db.getData('/ai-fab-position');
+        } catch {
+            // Default: clinging to the right edge, low on the screen.
+            return { side: 'right', yRatio: 0.8 };
+        }
+    }
+
+    async saveAIFabPosition(pos, sender) {
+        try {
+            const clean = {
+                side: pos && pos.side === 'left' ? 'left' : 'right',
+                yRatio: Math.min(1, Math.max(0, Number(pos && pos.yRatio) || 0))
+            };
+            await db.push('/ai-fab-position', clean);
+
+            // Keep the button in the same spot across every open session view.
+            for (const [, view] of this.browserViews) {
+                try {
+                    if (sender && view.webContents.id === sender.id) continue;
+                    view.webContents.send('ai-fab-position-changed', clean);
+                } catch { }
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error saving AI button position:', error);
             return { success: false, error: error.message };
         }
     }
