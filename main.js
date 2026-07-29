@@ -222,6 +222,21 @@ class MultiBrowserApp {
         this.init();
     }
 
+    // Bring the window back for a launch that hit the single-instance lock.
+    // Recreates it when it is gone: without this, a window that closed without
+    // quitting leaves a process that owns the lock but can never be seen.
+    restoreMainWindow() {
+        if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+            console.log('🪟 No live window — creating one for this activation');
+            this.createMainWindow();
+            return;
+        }
+        if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+        if (!this.mainWindow.isVisible()) this.mainWindow.show();
+        this.mainWindow.show();
+        this.mainWindow.focus();
+    }
+
     // Resolve a sessionId from a WebContents reference
     getSessionIdByWebContents(webContents) {
         for (const [sid, view] of this.browserViews) {
@@ -247,10 +262,8 @@ class MultiBrowserApp {
             console.log(`📲 second-instance received${link ? ` with WhatsApp link: ${link}` : ''}`);
             if (link) {
                 this.handleWhatsAppLink(link);
-            } else if (this.mainWindow) {
-                if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-                this.mainWindow.show();
-                this.mainWindow.focus();
+            } else {
+                this.restoreMainWindow();
             }
         });
 
@@ -577,6 +590,25 @@ class MultiBrowserApp {
         // Show window after icon is set
         this.mainWindow.once('ready-to-show', () => {
             this.mainWindow.show();
+        });
+
+        // Safety net: if the shell never reaches ready-to-show (a failed load,
+        // a half-written asar after an update), show the window anyway. An
+        // invisible process still holds the single-instance lock, so every
+        // later launch would exit silently and the app would look unopenable.
+        setTimeout(() => {
+            if (this.mainWindow && !this.mainWindow.isDestroyed() && !this.mainWindow.isVisible()) {
+                console.warn('⚠️ Window never reported ready-to-show — showing it anyway');
+                this.mainWindow.show();
+            }
+        }, 8000);
+
+        this.mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, url) => {
+            console.error(`❌ App shell failed to load (${errorCode} ${errorDescription}): ${url}`);
+        });
+
+        this.mainWindow.webContents.on('render-process-gone', (_event, details) => {
+            console.error(`💥 App shell renderer gone: ${details.reason}`);
         });
 
         // Remove menu bar for cleaner look
