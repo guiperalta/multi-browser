@@ -83,8 +83,37 @@ function getIconNativeImage() {
     }
 }
 
-// Initialize database for storing sessions
-const db = new JsonDB(new Config("sessions", true, false, '/'));
+// Session metadata lives in the per-user app data directory. Older builds used
+// a relative path, which wrote sessions.json into whatever the working
+// directory happened to be (the repo in dev, $HOME for an installed .deb), so
+// the first run here adopts any file left in those places.
+function resolveDatabasePath() {
+    const target = path.join(app.getPath('userData'), 'sessions.json');
+    if (fs.existsSync(target)) return target;
+
+    const legacyPaths = [
+        path.join(process.cwd(), 'sessions.json'),
+        path.join(__dirname, 'sessions.json'),
+        path.join(app.getPath('home'), 'sessions.json')
+    ];
+
+    for (const legacy of legacyPaths) {
+        if (legacy !== target && fs.existsSync(legacy)) {
+            try {
+                fs.mkdirSync(path.dirname(target), { recursive: true });
+                fs.copyFileSync(legacy, target);
+                console.log(`📦 Migrated session data from ${legacy} to ${target}`);
+                return target;
+            } catch (error) {
+                console.warn(`⚠️ Could not migrate ${legacy}: ${error.message}`);
+            }
+        }
+    }
+    return target;
+}
+
+// Initialize database for storing sessions (path without the .json suffix)
+const db = new JsonDB(new Config(resolveDatabasePath().replace(/\.json$/, ''), true, false, '/'));
 
 // Parse a WhatsApp link in any of its public forms and convert it to the
 // equivalent WhatsApp Web URL, or return null if it isn't a WhatsApp link:
@@ -647,7 +676,7 @@ class MultiBrowserApp {
         });
 
         ipcMain.handle('updates-open-release', async () => {
-            const url = this.pendingUpdate?.releaseUrl || `https://github.com/guiperalta/multi-browser/releases/latest`;
+            const url = this.pendingUpdate?.releaseUrl || updater.releasesUrl();
             await shell.openExternal(url);
             return { success: true };
         });

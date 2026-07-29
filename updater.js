@@ -24,7 +24,18 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { app, shell } = require('electron');
 
-const REPO = 'guiperalta/multi-browser';
+// Taken from package.json so a fork checks its own releases.
+function resolveRepo() {
+    try {
+        const pkg = require('./package.json');
+        const url = typeof pkg.repository === 'string' ? pkg.repository : pkg.repository?.url;
+        const match = String(url || '').match(/github\.com[/:]([^/]+\/[^/.]+)/);
+        if (match) return match[1];
+    } catch { }
+    return 'guiperalta/multi-browser';
+}
+
+const REPO = resolveRepo();
 const API_LATEST = `https://api.github.com/repos/${REPO}/releases/latest`;
 const USER_AGENT = 'multi-browser-updater';
 
@@ -245,4 +256,8 @@ async function installUpdate(filePath, format) {
     }
 }
 
-module.exports = { checkForUpdate, downloadAsset, installUpdate, detectFormat, isNewer };
+function releasesUrl() {
+    return `https://github.com/${REPO}/releases/latest`;
+}
+
+module.exports = { checkForUpdate, downloadAsset, installUpdate, detectFormat, isNewer, releasesUrl };

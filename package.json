@@ -1,7 +1,7 @@
 {
   "name": "multi-browser",
   "version": "1.0.7",
-  "description": "Desktop app for managing multiple isolated browser instances",
+  "description": "Electron desktop app for running multiple fully-isolated browser sessions side by side, with an in-page AI assistant",
   "main": "main.js",
   "desktopName": "multi-browser.desktop",
   "scripts": {
@@ -20,11 +20,13 @@
   },
   "keywords": [
     "browser",
-    "multi-instance",
-    "session",
-    "electron"
+    "multi-session",
+    "session-isolation",
+    "electron",
+    "whatsapp",
+    "desktop"
   ],
-  "author": "User",
+  "author": "Guilherme Peralta",
   "license": "MIT",
   "devDependencies": {
     "electron": "^41.1.1",
@@ -82,6 +84,15 @@
       "syncDesktopName": true,
       "category": "Network",
       "maintainer": "Multi Browser Team"
-    }
+    },
+    "maintainer": "Guilherme Peralta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guiperalta/multi-browser.git"
+  },
+  "homepage": "https://github.com/guiperalta/multi-browser",
+  "bugs": {
+    "url": "https://github.com/guiperalta/multi-browser/issues"
   }
 }

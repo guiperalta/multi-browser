@@ -14,9 +14,38 @@ Standard Electron split — one main process, one renderer for the app shell (ta
 | `preload/index.js` | Single preload for every session view (Electron allows one preload per view). Requires `notifications.js` then `ai-assistant.js`. |
 | `preload/notifications.js` | Notification interception (see below). |
 | `preload/ai-assistant.js` | In-page AI assistant overlay injected into each session. |
-| `ai-provider.js` | AI provider factory: `claude-cli` (local `claude` CLI, no key), `claude-api`, `openai-api`. Actions: review, translate, reply, summarize. |
-| `sessions.json` | Persisted session metadata (via `node-json-db`). |
+| `ai-provider.js` | AI provider factory: `claude-cli` (local `claude` CLI, no key), `claude-api`, `openai-api`, `openrouter-api`. Actions: review, translate, reply, summarize. |
+| `updater.js` | In-app updates from GitHub Releases: check, download (sha256-verified), install per package format. See below. |
+| `sessions.json` | Persisted state (via `node-json-db`) in `app.getPath('userData')`: `/sessions`, `/ai-settings`, `/ui-theme`, `/ai-fab-position`. |
 | `assets/`, `build/icons/` | App icons (png/ico/icns; `build/icons` is the electron-builder Linux icon set). |
+
+### Where state lives
+
+`resolveDatabasePath()` (top of `main.js`) puts `sessions.json` in `app.getPath('userData')`
+(`~/.config/multi-browser/` on Linux). Older builds passed a *relative* path to `node-json-db`, so
+the file landed in the working directory — the repo in dev, `$HOME` for a .deb launched from the
+desktop. On first run the resolver adopts a legacy file from cwd, the app directory, or `$HOME`, in
+that order. The repo's own `sessions.json` is gitignored.
+
+Note the file also holds AI API keys and (optionally) a GitHub token in plain text.
+
+### Theming
+
+`styles.css` defines every colour as a token in three blocks: dark (default), `:root[data-theme="light"]`,
+and the same light values under `@media (prefers-color-scheme: light)` scoped to `:root[data-theme="system"]`.
+The renderer stamps `data-theme` on `<html>` from `/ui-theme` and mirrors the choice into
+`nativeTheme.themeSource`. The in-page AI overlay stays dark in both — it sits on top of arbitrary
+sites, so it reads as a tool laid over the page rather than part of it.
+
+### Updates
+
+`updater.js` reads `https://api.github.com/repos/<repo>/releases/latest` (repo taken from
+`package.json` → `repository`, so forks check their own). electron-updater is deliberately not used:
+it cannot install a `.deb`, which is the main Linux format here. Install per format — nsis `/S`;
+AppImage swapped by a detached shell after exit; deb/rpm through `pkexec` (one password prompt);
+dmg/dev just opens the file. Downloads are checked against the asset's sha256 `digest` when GitHub
+provides one. A token from `/ai-settings/githubToken` is sent only if set (needed only while the
+repo is private).
 
 ### Session isolation
 
@@ -48,6 +77,8 @@ npm install
 npm run dev        # electron --no-sandbox . --dev  (verbose logging)
 npm start          # electron --no-sandbox .
 ```
+
+To drive the app headlessly for a UI check (xvfb + CDP), see `.claude/skills/run-app/SKILL.md`.
 
 `--no-sandbox` is required in the current launch scripts. Press **Ctrl+T** to fire a self-test notification.
 
