@@ -104,4 +104,4 @@ npm run build:win       # Windows nsis installer
 npm run build:mac       # macOS dmg
 ```
 
-Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version` (currently `1.0.9`) and is also shown in the window title. Bump `version` there before re-packaging.
+Artifacts land in `dist/` — e.g. `Multi Browser-<version>.AppImage` and `multi-browser_<version>_amd64.deb`. App version comes from `package.json` → `version` (currently `1.0.10`) and is also shown in the window title. Bump `version` there before re-packaging.
