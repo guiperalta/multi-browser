@@ -513,6 +513,12 @@ body {
     white-space: nowrap;
 }
 
+/* While downloading, the readout shrinks so the bar gets the room. */
+.update-row.downloading .update-status {
+    flex: none;
+    color: var(--accent);
+}
+
 .update-bar {
     flex: 1;
     height: 3px;

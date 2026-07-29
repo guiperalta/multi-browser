@@ -341,9 +341,19 @@ class MultiBrowserUI {
 
         this.updateState = 'idle';
 
-        ipcRenderer.on('updates-progress', ({ percent }) => {
+        // Note the leading event arg: ipcRenderer.on hands the listener
+        // (event, payload), so destructuring the first parameter reads the
+        // event object and every field comes back undefined.
+        ipcRenderer.on('updates-progress', (_event, { percent, received, total }) => {
             const fill = document.getElementById('updateBarFill');
+            const status = document.getElementById('updateStatus');
             if (fill) fill.style.width = `${percent}%`;
+            if (status) {
+                const mb = (bytes) => (bytes / 1048576).toFixed(0);
+                status.textContent = total
+                    ? `${percent}% · ${mb(received)}/${mb(total)} MB`
+                    : `${mb(received)} MB`;
+            }
         });
 
         action.addEventListener('click', () => this.runUpdateAction());
@@ -361,8 +371,8 @@ class MultiBrowserUI {
 
         if (state) this.updateState = state;
         statusEl.textContent = status;
-        statusEl.hidden = progress;
         barEl.hidden = !progress;
+        row.classList.toggle('downloading', progress);
         actionEl.textContent = button;
         actionEl.disabled = disabled;
         row.classList.toggle('has-update', state === 'available' || state === 'ready');
@@ -403,7 +413,9 @@ class MultiBrowserUI {
     }
 
     async downloadUpdate() {
-        this.setUpdateUI({ status: 'Downloading', button: 'Download', progress: true, disabled: true, state: 'downloading' });
+        this.setUpdateUI({ status: '0%', button: 'Download', progress: true, disabled: true, state: 'downloading' });
+        const fill = document.getElementById('updateBarFill');
+        if (fill) fill.style.width = '0%';
         const result = await ipcRenderer.invoke('updates-download');
 
         if (!result.success) {
