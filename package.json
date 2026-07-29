@@ -83,9 +83,8 @@
       "icon": "build/icons",
       "syncDesktopName": true,
       "category": "Network",
-      "maintainer": "Multi Browser Team"
-    },
-    "maintainer": "Guilherme Peralta"
+      "maintainer": "Guilherme Peralta"
+    }
   },
   "repository": {
     "type": "git",
