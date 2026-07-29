@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage, nativeTheme, Menu, MenuItem } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, WebContentsView, Notification, nativeImage, nativeTheme, safeStorage, Menu, MenuItem } = require('electron');
 
 // Default spellchecker languages for new sessions. Multi-language: each session
 // can override this with its own list (sessionData.spellLanguages).
@@ -114,6 +114,46 @@ function resolveDatabasePath() {
 
 // Initialize database for storing sessions (path without the .json suffix)
 const db = new JsonDB(new Config(resolveDatabasePath().replace(/\.json$/, ''), true, false, '/'));
+
+// ── Secrets at rest ───────────────────────────────────────────────────────
+// API keys and the update token are kept in the OS keychain-backed
+// safeStorage, not in the clear. Values are stored as "enc:v1:<base64>".
+// When the platform has no keychain (some headless Linux setups),
+// isEncryptionAvailable() is false and values stay plain — the app keeps
+// working, it just cannot protect them.
+const SECRET_FIELDS = ['claudeApiKey', 'openaiApiKey', 'openrouterApiKey', 'githubToken'];
+const ENC_PREFIX = 'enc:v1:';
+
+function encryptSecret(value) {
+    if (typeof value !== 'string' || !value || value.startsWith(ENC_PREFIX)) return value;
+    try {
+        if (!safeStorage.isEncryptionAvailable()) return value;
+        return ENC_PREFIX + safeStorage.encryptString(value).toString('base64');
+    } catch (error) {
+        console.warn('⚠️ Could not encrypt a stored secret:', error.message);
+        return value;
+    }
+}
+
+function decryptSecret(value) {
+    if (typeof value !== 'string' || !value.startsWith(ENC_PREFIX)) return value;
+    try {
+        return safeStorage.decryptString(Buffer.from(value.slice(ENC_PREFIX.length), 'base64'));
+    } catch (error) {
+        // Wrong machine, reset keychain, or a corrupted value: treat as unset
+        // rather than handing an unusable string to a provider.
+        console.warn('⚠️ Could not decrypt a stored secret:', error.message);
+        return '';
+    }
+}
+
+function mapSecrets(settings, fn) {
+    const out = { ...settings };
+    for (const field of SECRET_FIELDS) {
+        if (field in out) out[field] = fn(out[field]);
+    }
+    return out;
+}
 
 // Parse a WhatsApp link in any of its public forms and convert it to the
 // equivalent WhatsApp Web URL, or return null if it isn't a WhatsApp link:
@@ -245,6 +285,9 @@ class MultiBrowserApp {
             // Restore the saved UI theme so native chrome (menus, dialogs,
             // form controls) matches the shell.
             this.getUITheme().then(theme => { nativeTheme.themeSource = theme; }).catch(() => { });
+
+            // Move any secrets written by older builds into the keychain.
+            this.encryptStoredSecrets().catch(() => { });
 
             // Set app icon (important for Linux taskbar/dock)
             const icon = getIconNativeImage();
@@ -1388,7 +1431,7 @@ class MultiBrowserApp {
 
     async getAISettings() {
         try {
-            return await db.getData('/ai-settings');
+            return mapSecrets(await db.getData('/ai-settings'), decryptSecret);
         } catch {
             // Return defaults if not yet configured
             return {
@@ -1405,9 +1448,27 @@ class MultiBrowserApp {
         }
     }
 
+    // Older builds wrote API keys in the clear; re-save them encrypted once.
+    async encryptStoredSecrets() {
+        if (!safeStorage.isEncryptionAvailable()) {
+            console.log('🔓 safeStorage unavailable — stored secrets stay in plain text');
+            return;
+        }
+        let stored;
+        try {
+            stored = await db.getData('/ai-settings');
+        } catch {
+            return; // nothing configured yet
+        }
+        const needsMigration = SECRET_FIELDS.some(f => stored[f] && !String(stored[f]).startsWith(ENC_PREFIX));
+        if (!needsMigration) return;
+        await db.push('/ai-settings', mapSecrets(stored, encryptSecret));
+        console.log('🔐 Stored secrets migrated into the OS keychain');
+    }
+
     async saveAISettings(settings) {
         try {
-            await db.push('/ai-settings', settings);
+            await db.push('/ai-settings', mapSecrets(settings, encryptSecret));
 
             // Notify all browser views about updated shortcut
             for (const [, view] of this.browserViews) {

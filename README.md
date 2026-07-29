@@ -105,8 +105,8 @@ git tag v1.2.3 && git push origin v1.2.3
 ## Your data
 
 - Sessions, preferences and AI settings live in one file in the per-user app data directory — `~/.config/multi-browser/sessions.json` on Linux, `%APPDATA%\multi-browser\` on Windows. Session cookies and storage live beside it, one directory per partition.
-- **API keys you enter are stored there in plain text.** Nothing is sent anywhere except the AI provider you pick, and only when you invoke an AI action.
-- No telemetry, no analytics, no accounts.
+- **API keys and the update token are encrypted with the OS keychain** (Electron `safeStorage` — gnome-keyring/kwallet on Linux, DPAPI on Windows, Keychain on macOS) and stored as `enc:v1:…`. Keys saved by older builds are migrated on first launch. If the platform has no keychain, the app logs a warning and falls back to storing them as-is.
+- Nothing is sent anywhere except the AI provider you pick, and only when you invoke an AI action. No telemetry, no analytics, no accounts.
 
 ## Troubleshooting
 

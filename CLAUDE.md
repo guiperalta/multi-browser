@@ -27,7 +27,12 @@ the file landed in the working directory — the repo in dev, `$HOME` for a .deb
 desktop. On first run the resolver adopts a legacy file from cwd, the app directory, or `$HOME`, in
 that order. The repo's own `sessions.json` is gitignored.
 
-Note the file also holds AI API keys and (optionally) a GitHub token in plain text.
+The file also holds AI API keys and (optionally) a GitHub token. Those fields
+(`SECRET_FIELDS` in `main.js`) go through Electron's `safeStorage` and are written as
+`enc:v1:<base64>`; `getAISettings()` decrypts on read, `saveAISettings()` encrypts on write, and
+`encryptStoredSecrets()` migrates values left in the clear by older builds. Where no OS keychain
+exists, `isEncryptionAvailable()` is false and values stay plain — the app logs it and keeps
+working.
 
 ### Theming
 
