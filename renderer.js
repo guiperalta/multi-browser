@@ -337,7 +337,8 @@ class MultiBrowserUI {
     setupUpdates() {
         const row = document.getElementById('updateRow');
         const action = document.getElementById('updateAction');
-        if (!row || !action) return;
+        const manual = document.getElementById('updateManual');
+        if (!row || !action || !manual) return;
 
         this.updateState = 'idle';
 
@@ -357,6 +358,7 @@ class MultiBrowserUI {
         });
 
         action.addEventListener('click', () => this.runUpdateAction());
+        manual.addEventListener('click', () => ipcRenderer.invoke('updates-open-release'));
 
         // Tab-bar badge: the only sign of an update while you are inside a
         // session tab. Clicking it takes you to the row that does the work.
@@ -386,10 +388,11 @@ class MultiBrowserUI {
         if (badge) badge.hidden = !visible;
     }
 
-    setUpdateUI({ status, button, state, progress = false, disabled = false }) {
+    setUpdateUI({ status, button, state, progress = false, disabled = false, offerManual = false }) {
         const row = document.getElementById('updateRow');
         const statusEl = document.getElementById('updateStatus');
         const actionEl = document.getElementById('updateAction');
+        const manualEl = document.getElementById('updateManual');
         const barEl = document.getElementById('updateBar');
         if (!row) return;
 
@@ -399,6 +402,7 @@ class MultiBrowserUI {
         row.classList.toggle('downloading', progress);
         actionEl.textContent = button;
         actionEl.disabled = disabled;
+        manualEl.hidden = !offerManual;
         row.classList.toggle('has-update', state === 'available' || state === 'ready');
         row.classList.toggle('failed', state === 'error');
     }
@@ -417,7 +421,12 @@ class MultiBrowserUI {
 
         if (!result.success) {
             if (silent) return;
-            this.setUpdateUI({ status: `Check failed: ${result.error}`, button: 'Retry', state: 'error' });
+            this.setUpdateUI({
+                status: `Check failed: ${result.error}`,
+                button: 'Retry',
+                state: 'error',
+                offerManual: true
+            });
             return;
         }
 
@@ -449,7 +458,12 @@ class MultiBrowserUI {
         const result = await ipcRenderer.invoke('updates-download');
 
         if (!result.success) {
-            this.setUpdateUI({ status: `Download failed: ${result.error}`, button: 'Retry', state: 'error' });
+            this.setUpdateUI({
+                status: `Download failed: ${result.error}`,
+                button: 'Retry',
+                state: 'error',
+                offerManual: true
+            });
             return;
         }
         this.setUpdateUI({ status: 'Update ready', button: 'Install', state: 'ready' });
@@ -461,7 +475,12 @@ class MultiBrowserUI {
         const result = await ipcRenderer.invoke('updates-install');
 
         if (!result.success) {
-            this.setUpdateUI({ status: result.error, button: 'Retry', state: 'error' });
+            this.setUpdateUI({
+                status: result.error,
+                button: 'Retry',
+                state: 'error',
+                offerManual: true
+            });
             this.updateState = 'ready';
             return;
         }

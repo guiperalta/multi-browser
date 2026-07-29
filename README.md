@@ -59,7 +59,9 @@ The home screen has an **Updates** row: it checks on launch, and `Check → Down
 does the rest. AppImage and Windows update silently; `.deb` and `.rpm` ask for your password once
 (installing system packages needs root), then the app restarts itself. If PolicyKit/`pkexec` is
 missing or cannot obtain authorization, Multi Browser opens the downloaded package in your system
-package installer so you can approve the update there, then restart Multi Browser.
+package installer so you can approve the update there, then restart Multi Browser. If any update
+step fails, the update row keeps its retry action and offers a link to download the latest release
+manually.
 
 ## Run from source
 

@@ -618,6 +618,24 @@ body {
     cursor: default;
 }
 
+.update-manual {
+    flex: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--danger);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.update-manual:hover {
+    text-decoration-thickness: 2px;
+}
+
 .update-row.has-update .update-action {
     border-color: var(--accent-line);
     color: var(--accent);

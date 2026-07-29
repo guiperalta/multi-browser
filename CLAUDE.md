@@ -51,7 +51,8 @@ AppImage swapped by a detached shell after exit; deb/rpm through `pkexec` (one p
 when PolicyKit is missing or cannot obtain authorization, deb/rpm fall back to the desktop's
 registered package installer; dmg/dev just opens the file. Downloads are checked against the
 asset's sha256 `digest` when GitHub provides one. A token from `/ai-settings/githubToken` is sent
-only if set (needed only while the repo is private).
+only if set (needed only while the repo is private). Check, download, and install failures keep
+their retry action and reveal a `Download manually` control that opens the latest release page.
 
 ### Session isolation
 
