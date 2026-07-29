@@ -358,8 +358,32 @@ class MultiBrowserUI {
 
         action.addEventListener('click', () => this.runUpdateAction());
 
-        // Quiet check on launch: only speaks up when something is waiting.
+        // Tab-bar badge: the only sign of an update while you are inside a
+        // session tab. Clicking it takes you to the row that does the work.
+        const badge = document.getElementById('updateBadge');
+        if (badge) {
+            badge.addEventListener('click', () => {
+                this.switchToTab('welcome');
+                row.classList.remove('attention');
+                void row.offsetWidth; // restart the animation
+                row.classList.add('attention');
+                row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            });
+        }
+
+        // Quiet check shortly after launch, then every 6 hours, so an update
+        // that lands while the app is open still gets noticed.
         setTimeout(() => this.checkForUpdates({ silent: true }), 4000);
+        setInterval(() => {
+            // Don't interrupt a download or a pending install.
+            if (['downloading', 'installing', 'ready'].includes(this.updateState)) return;
+            this.checkForUpdates({ silent: true });
+        }, 6 * 60 * 60 * 1000);
+    }
+
+    showUpdateBadge(visible) {
+        const badge = document.getElementById('updateBadge');
+        if (badge) badge.hidden = !visible;
     }
 
     setUpdateUI({ status, button, state, progress = false, disabled = false }) {
@@ -398,9 +422,15 @@ class MultiBrowserUI {
         }
 
         if (!result.available) {
+            this.showUpdateBadge(false);
             if (silent) return;
             this.setUpdateUI({ status: `Up to date · v${result.currentVersion}`, button: 'Check', state: 'idle' });
             return;
+        }
+
+        this.showUpdateBadge(true);
+        if (silent && this.activeTabId !== 'welcome') {
+            this.showNotification(`Update available: v${result.latestVersion}`, 'info');
         }
 
         if (!result.installable) {
@@ -423,6 +453,7 @@ class MultiBrowserUI {
             return;
         }
         this.setUpdateUI({ status: 'Update ready', button: 'Install', state: 'ready' });
+        this.showUpdateBadge(true);
     }
 
     async installUpdate() {

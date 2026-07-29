@@ -337,6 +337,65 @@ body {
     z-index: 150;
 }
 
+/* Update badge: only in the tab bar while an update is waiting, so the
+   news reaches you without a trip to the home screen. */
+.update-badge {
+    position: relative;
+    margin-right: 8px;
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.update-badge:hover {
+    background: var(--accent-soft);
+    color: var(--accent-bright);
+    border-color: var(--accent);
+}
+
+.update-badge::after {
+    content: "";
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg-sunk);
+    animation: update-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes update-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.35;
+    }
+}
+
+/* Brief highlight when the badge sends you to the row */
+.update-row.attention {
+    animation: attention 1.6s var(--ease);
+}
+
+@keyframes attention {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+
+    25%,
+    60% {
+        box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+}
+
 /* ── Content area ────────────────────────────────────────── */
 
 .content-area {
