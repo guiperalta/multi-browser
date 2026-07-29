@@ -7,7 +7,7 @@
 //
 //   nsis      → run the installer silently, then quit
 //   appimage  → swap the running AppImage on the way out, then relaunch
-//   deb / rpm → pkexec (one password prompt), then relaunch
+//   deb / rpm → pkexec (one password prompt), or the system package installer
 //   dmg / dev → just open the release page
 //
 // Requests are unauthenticated by default. While the repository is private the
@@ -198,18 +198,69 @@ async function downloadAsset(asset, onProgress, token) {
 }
 
 // Runs `pkexec <cmd> <args>`: one graphical password prompt, no sudoers setup.
+// `reason` lets the caller distinguish a missing PolicyKit installation/agent
+// from a declined prompt or a real package installation failure.
 function runPrivileged(cmd, args) {
     return new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            resolve(result);
+        };
         const child = spawn('pkexec', [cmd, ...args], { stdio: 'ignore' });
-        child.on('error', (err) => resolve({ ok: false, error: err.message }));
+        child.on('error', (err) => {
+            if (err.code === 'ENOENT') {
+                return finish({
+                    ok: false,
+                    reason: 'unavailable',
+                    error: 'Graphical authorization is not available on this system.'
+                });
+            }
+            finish({ ok: false, reason: 'launch-failed', error: err.message });
+        });
         child.on('exit', (code) => {
-            if (code === 0) return resolve({ ok: true });
-            // 126 = user dismissed the prompt, 127 = pkexec/agent missing.
-            if (code === 126) return resolve({ ok: false, error: 'Authorization was cancelled.' });
-            if (code === 127) return resolve({ ok: false, error: 'pkexec is not available on this system.' });
-            resolve({ ok: false, error: `Installer exited with code ${code}.` });
+            if (code === 0) return finish({ ok: true });
+            // 126 = user dismissed the prompt. 127 is broader: PolicyKit
+            // could not obtain authorization or encountered another error.
+            if (code === 126) {
+                return finish({ ok: false, reason: 'cancelled', error: 'Authorization was cancelled.' });
+            }
+            if (code === 127) {
+                return finish({
+                    ok: false,
+                    reason: 'authorization-failed',
+                    error: 'Graphical authorization failed or could not be obtained.'
+                });
+            }
+            finish({ ok: false, reason: 'install-failed', error: `Installer exited with code ${code}.` });
         });
     });
+}
+
+// There is no universal command-line privilege helper on Linux. If PolicyKit
+// is absent or cannot obtain authorization, hand the already-downloaded
+// package to the desktop's registered package installer (App Center, Discover,
+// GDebi, etc.) instead of failing the update. The installer owns the password
+// prompt and completion UI.
+async function openSystemPackageInstaller(filePath) {
+    try {
+        const error = await shell.openPath(filePath);
+        if (!error) {
+            return { success: true, quitting: false, manual: true };
+        }
+        shell.showItemInFolder(filePath);
+        return {
+            success: false,
+            error: `Could not open the system package installer: ${error}`
+        };
+    } catch (error) {
+        shell.showItemInFolder(filePath);
+        return {
+            success: false,
+            error: `Could not open the system package installer: ${error.message}`
+        };
+    }
 }
 
 async function installUpdate(filePath, format) {
@@ -235,7 +286,12 @@ async function installUpdate(filePath, format) {
 
         case 'deb': {
             const result = await runPrivileged('dpkg', ['-i', filePath]);
-            if (!result.ok) return { success: false, error: result.error };
+            if (!result.ok) {
+                if (['unavailable', 'authorization-failed'].includes(result.reason)) {
+                    return openSystemPackageInstaller(filePath);
+                }
+                return { success: false, error: result.error };
+            }
             app.relaunch();
             setTimeout(() => app.quit(), 400);
             return { success: true, quitting: true };
@@ -243,7 +299,12 @@ async function installUpdate(filePath, format) {
 
         case 'rpm': {
             const result = await runPrivileged('rpm', ['-U', '--force', filePath]);
-            if (!result.ok) return { success: false, error: result.error };
+            if (!result.ok) {
+                if (['unavailable', 'authorization-failed'].includes(result.reason)) {
+                    return openSystemPackageInstaller(filePath);
+                }
+                return { success: false, error: result.error };
+            }
             app.relaunch();
             setTimeout(() => app.quit(), 400);
             return { success: true, quitting: true };

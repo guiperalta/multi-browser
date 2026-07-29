@@ -57,7 +57,9 @@ macOS builds from source (`npm run build:mac`) but isn't shipped or notarized.
 
 The home screen has an **Updates** row: it checks on launch, and `Check → Download → Install`
 does the rest. AppImage and Windows update silently; `.deb` and `.rpm` ask for your password once
-(installing system packages needs root), then the app restarts itself.
+(installing system packages needs root), then the app restarts itself. If PolicyKit/`pkexec` is
+missing or cannot obtain authorization, Multi Browser opens the downloaded package in your system
+package installer so you can approve the update there, then restart Multi Browser.
 
 ## Run from source
 

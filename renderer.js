@@ -467,6 +467,12 @@ class MultiBrowserUI {
         }
         if (result.quitting) {
             this.setUpdateUI({ status: 'Restarting…', button: 'Install', disabled: true, state: 'installing' });
+        } else if (result.manual) {
+            this.setUpdateUI({
+                status: 'Finish there, then restart Multi Browser',
+                button: 'Check',
+                state: 'idle'
+            });
         } else {
             this.setUpdateUI({ status: 'Installer opened', button: 'Check', state: 'idle' });
         }

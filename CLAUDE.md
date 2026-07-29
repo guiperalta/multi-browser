@@ -48,9 +48,10 @@ sites, so it reads as a tool laid over the page rather than part of it.
 `package.json` → `repository`, so forks check their own). electron-updater is deliberately not used:
 it cannot install a `.deb`, which is the main Linux format here. Install per format — nsis `/S`;
 AppImage swapped by a detached shell after exit; deb/rpm through `pkexec` (one password prompt);
-dmg/dev just opens the file. Downloads are checked against the asset's sha256 `digest` when GitHub
-provides one. A token from `/ai-settings/githubToken` is sent only if set (needed only while the
-repo is private).
+when PolicyKit is missing or cannot obtain authorization, deb/rpm fall back to the desktop's
+registered package installer; dmg/dev just opens the file. Downloads are checked against the
+asset's sha256 `digest` when GitHub provides one. A token from `/ai-settings/githubToken` is sent
+only if set (needed only while the repo is private).
 
 ### Session isolation
 
