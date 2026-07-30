@@ -161,6 +161,13 @@
     box-sizing: border-box;
 }
 
+/* The UA's [hidden] rule is a bare `display: none`, so any class that sets
+   `display` (e.g. .icon-btn) silently beats it and the element stays on
+   screen — that is how the update badge showed up with no update waiting. */
+[hidden] {
+    display: none !important;
+}
+
 body {
     font-family: var(--sans);
     background: var(--bg);
