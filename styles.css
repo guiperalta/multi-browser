@@ -1344,9 +1344,9 @@ body {
 .wa-chooser-text {
     margin-top: 8px;
     padding: 8px 10px;
-    border-left: 2px solid var(--accent-line);
+    border: 1px solid var(--hairline-soft);
     background: var(--wash);
-    border-radius: 0 8px 8px 0;
+    border-radius: 8px;
     font-size: 12.5px;
     line-height: 1.45;
     color: var(--ink-dim);
@@ -1416,8 +1416,8 @@ body {
 .wa-chooser-state {
     flex: none;
     font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.08em;
+    font-size: 11px;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--ink-dim);
 }
