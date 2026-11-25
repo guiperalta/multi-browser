@@ -30,9 +30,9 @@ Chromium is embedded (via Electron), so **no external browser is required**.
 - **Fully-isolated sessions** — each one is a persistent Electron partition: cookies, `localStorage`, cache. Log into as many accounts of the same site as you like.
 - **Persistent by default** — partitions live on disk, so logins survive restarts. Deleting a session wipes its data.
 - **Tabbed UI** — create, rename, reorder your work across tabs; mark sessions to auto-open on launch.
-- **AI assistant overlay** — review, translate, reply, summarize the text you're writing, in any session (`Alt+H`, or the floating button you can drag anywhere). Backed by the local **Claude CLI** (no key needed), **Claude API**, **OpenAI**, or **OpenRouter**.
+- **AI assistant overlay** — write a message from a short prompt (*"say hello to Paula and ask if there's any news on that issue"*), or review, translate, reply to and summarize the text you're writing, in any session (`Alt+H`, or the floating button you can drag anywhere). Generate lets you pick the language and tone (casual, neutral, formal); Translate asks for the target language each time. Backed by the local **Claude CLI** (no key needed), **Claude API**, **OpenAI**, or **OpenRouter**.
 - **Native notifications** — site notifications fire as real desktop notifications; clicking one raises the window and jumps to the right session, tab, and conversation.
-- **WhatsApp deep links** — `whatsapp://`, `wa.me` and `api.whatsapp.com` links open in your WhatsApp session instead of failing to launch a native app.
+- **WhatsApp deep links** — `whatsapp://`, `wa.me` and `api.whatsapp.com` links open in your WhatsApp session instead of failing to launch a native app. The chat opens in the already-loaded WhatsApp Web, without reloading it, with the link's message waiting in the text box. With more than one WhatsApp session, the app asks which one to use (keys `1`–`9` pick, `Esc` cancels).
 - **Per-session spellcheck** — pick languages per session (defaults to Portuguese + English), with right-click suggestions and "add to dictionary".
 - **Light and dark** — follows your system by default; switch it from the home screen.
 - **In-app updates** — checks GitHub Releases, downloads, and installs, on every format it ships.
@@ -101,7 +101,7 @@ git tag v1.2.3 && git push origin v1.2.3
 
 - **Isolation** — every session is a `WebContentsView` bound to a `persist:session-<id>` partition. The app shell (tab bar, home screen) is an ordinary renderer; page content never shares a process boundary with it.
 - **Notifications** — a main-world hook *wraps* the site's `Notification` instead of replacing it, so the site's own click handler still opens the right conversation while the app raises the window and switches tabs.
-- **WhatsApp links** — the app registers as the `whatsapp://` handler and normalizes `wa.me` / `api.whatsapp.com` URLs to `web.whatsapp.com`, routing them into the WhatsApp session.
+- **WhatsApp links** — the app registers as the `whatsapp://` handler and normalizes `wa.me` / `api.whatsapp.com` URLs to `web.whatsapp.com`, routing them into the WhatsApp session. When that session is already loaded, `whatsapp-open-chat.js` opens the chat through WhatsApp Web's own modules instead of reloading the page; if WhatsApp changes those internals, the app falls back to the reload.
 - **Updates** — `updater.js` reads the GitHub Releases API, verifies the download against the asset's SHA-256 digest, and hands it to the right installer per package format.
 
 [`CLAUDE.md`](CLAUDE.md) has the full architecture notes, including the parts that are subtle enough to have caused real bugs.
