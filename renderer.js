@@ -66,6 +66,11 @@ class MultiBrowserUI {
             console.log(`[Site notification][${sessionId || 'unknown'}] ${title} | ${options?.body || ''} | ${url}`);
         });
 
+        // A WhatsApp link arrived and several WhatsApp sessions could open it
+        ipcRenderer.on('choose-whatsapp-session', (_e, request) => {
+            this.showWhatsAppChooser(request);
+        });
+
         // Focus a specific session when a system notification is clicked
         ipcRenderer.on('focus-session', async (_e, { sessionId, source }) => {
             console.log(`🎯 Focus session request received: ${sessionId} (source: ${source || 'unknown'})`);
@@ -175,8 +180,115 @@ class MultiBrowserUI {
         // Setup rename modal
         this.setupRenameModal();
 
+        // "Open in which WhatsApp?" chooser
+        this.setupWhatsAppChooser();
+
         // AI Settings modal
         this.setupAISettingsModal();
+    }
+
+    // "Open in which WhatsApp?" — one button per session, numbered so 1–9 on
+    // the keyboard picks it. The answer goes back to main, which opens the
+    // chat in the chosen session.
+    async showWhatsAppChooser({ requestId, phone, text, sessions }) {
+        const modal = document.getElementById('whatsappChooserModal');
+
+        // A newer link replaces one still waiting; main already dropped it.
+        if (!this.waChooser) {
+            this.waChooser = { previousTab: this.activeTabId };
+            if (this.activeTabId && this.activeTabId !== 'welcome') {
+                try {
+                    await ipcRenderer.invoke('hide-browser-view', this.activeTabId);
+                } catch (error) {
+                    console.log('Error hiding browser view:', error);
+                }
+            }
+        }
+        this.waChooser.requestId = requestId;
+        this.waChooser.sessions = sessions;
+
+        document.getElementById('waChooserPhone').textContent = this.formatPhone(phone);
+        document.getElementById('waChooserText').textContent = text || '';
+
+        const list = document.getElementById('waChooserList');
+        list.replaceChildren(...sessions.map((s, i) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wa-chooser-option';
+
+            const key = document.createElement('span');
+            key.className = 'wa-chooser-key';
+            key.textContent = i < 9 ? String(i + 1) : '';
+
+            const name = document.createElement('span');
+            name.className = 'wa-chooser-name';
+            name.textContent = s.name || 'WhatsApp';
+
+            const state = document.createElement('span');
+            state.className = 'wa-chooser-state' + (s.open ? ' is-open' : '');
+            state.textContent = s.open ? 'Open' : 'Closed';
+
+            button.append(key, name, state);
+            button.addEventListener('click', () => this.answerWhatsAppChooser(s.id));
+            return button;
+        }));
+
+        modal.classList.add('show');
+        list.querySelector('button')?.focus();
+    }
+
+    async answerWhatsAppChooser(sessionId) {
+        const chooser = this.waChooser;
+        if (!chooser) return;
+        this.waChooser = null;
+
+        document.getElementById('whatsappChooserModal').classList.remove('show');
+
+        // Bring back the view that was on screen; if a session was picked,
+        // main switches to it right after.
+        if (chooser.previousTab && chooser.previousTab !== 'welcome') {
+            try {
+                await ipcRenderer.invoke('show-browser-view', chooser.previousTab);
+            } catch (error) {
+                console.log('Error restoring browser view:', error);
+            }
+        }
+
+        ipcRenderer.send('whatsapp-session-chosen', { requestId: chooser.requestId, sessionId });
+    }
+
+    setupWhatsAppChooser() {
+        const modal = document.getElementById('whatsappChooserModal');
+        const cancel = () => this.answerWhatsAppChooser(null);
+
+        document.getElementById('closeWhatsAppChooser').addEventListener('click', cancel);
+        document.getElementById('cancelWhatsAppChooser').addEventListener('click', cancel);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) cancel();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!this.waChooser) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+                return;
+            }
+            const index = Number(e.key) - 1;
+            const session = Number.isInteger(index) && index >= 0 ? this.waChooser.sessions[index] : null;
+            if (session) {
+                e.preventDefault();
+                this.answerWhatsAppChooser(session.id);
+            }
+        });
+    }
+
+    // 551434180638 → +55 14 3418-0638 for Brazilian numbers; other
+    // countries just get a leading +.
+    formatPhone(phone) {
+        const digits = String(phone || '').replace(/\D/g, '');
+        const br = digits.match(/^55(\d{2})(\d{4,5})(\d{4})$/);
+        return br ? `+55 ${br[1]} ${br[2]}-${br[3]}` : `+${digits}`;
     }
 
     async showCreateSessionModal() {

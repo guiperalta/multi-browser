@@ -272,6 +272,26 @@
         </div>
     </div>
 
+    <!-- WhatsApp session chooser: a wa.me / whatsapp:// link arrived and more
+         than one WhatsApp session could open it -->
+    <div id="whatsappChooserModal" class="modal">
+        <div class="modal-content wa-chooser">
+            <div class="modal-header">
+                <span class="dot"></span>
+                <h2>Open in which WhatsApp?</h2>
+                <button class="modal-close" id="closeWhatsAppChooser">&times;</button>
+            </div>
+            <div class="wa-chooser-body">
+                <p class="wa-chooser-target">Chat with <strong id="waChooserPhone"></strong></p>
+                <p class="wa-chooser-text" id="waChooserText"></p>
+                <div class="wa-chooser-list" id="waChooserList"></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelWhatsAppChooser">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- AI Settings Modal -->
     <div id="aiSettingsModal" class="modal">
         <div class="modal-content" style="max-width: 560px;">

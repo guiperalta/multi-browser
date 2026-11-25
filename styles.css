@@ -1319,6 +1319,113 @@ body {
     z-index: 2147483647;
 }
 
+/* ── WhatsApp session chooser ────────────────────────────── */
+
+.wa-chooser {
+    max-width: 420px;
+}
+
+.wa-chooser-body {
+    padding: 18px 22px 22px;
+    overflow-y: auto;
+}
+
+.wa-chooser-target {
+    font-size: 13px;
+    color: var(--ink-dim);
+}
+
+.wa-chooser-target strong {
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.wa-chooser-text {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-left: 2px solid var(--accent-line);
+    background: var(--wash);
+    border-radius: 0 8px 8px 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ink-dim);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 5.8em;
+    overflow: hidden;
+}
+
+.wa-chooser-text:empty {
+    display: none;
+}
+
+.wa-chooser-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.wa-chooser-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 13px;
+    background: var(--wash);
+    border: 1px solid var(--hairline);
+    border-radius: 11px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wa-chooser-option:hover,
+.wa-chooser-option:focus-visible {
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
+    outline: none;
+}
+
+.wa-chooser-key {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-dim);
+}
+
+.wa-chooser-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wa-chooser-state {
+    flex: none;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+.wa-chooser-state.is-open {
+    color: var(--ok);
+}
+
 /* ── States ──────────────────────────────────────────────── */
 
 .loading {

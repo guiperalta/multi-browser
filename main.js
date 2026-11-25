@@ -8,6 +8,7 @@ const fs = require('fs');
 const { JsonDB, Config } = require('node-json-db');
 const { createProvider } = require('./ai-provider');
 const updater = require('./updater');
+const { buildOpenChatScript } = require('./whatsapp-open-chat');
 
 const LINUX_DESKTOP_NAME = 'multi-browser.desktop';
 const LINUX_WM_CLASS = path.basename(LINUX_DESKTOP_NAME, '.desktop');
@@ -218,6 +219,7 @@ class MultiBrowserApp {
         this.activeNotifications = new Map(); // sessionId -> notification objects
         this.recentlyOpenedFolders = new Set(); // Track folders that were recently opened
         this.pendingSessionNavigations = new Map(); // sessionId -> URL to load once the view is created
+        this.pendingWhatsAppChoice = null; // { requestId, resolve } while the chooser is open
         this.pendingUpdate = null; // release info from the last successful update check
         this.init();
     }
@@ -372,6 +374,12 @@ class MultiBrowserApp {
         // The site's own notification was clicked: bring its window/tab to the
         // front. The page keeps showing the real notification and handles
         // conversation navigation itself; we only focus the right session.
+        // Answer from the "which WhatsApp?" chooser (see askWhichWhatsAppSession)
+        ipcMain.on('whatsapp-session-chosen', (_event, { requestId, sessionId }) => {
+            const pending = this.pendingWhatsAppChoice;
+            if (pending && pending.requestId === requestId) pending.resolve(sessionId || null);
+        });
+
         ipcMain.on('focus-session-from-notification', (event) => {
             const sessionId = this.getSessionIdByWebContents(event.sender);
             console.log(`🔔 Notification clicked for session ${sessionId}`);
@@ -425,6 +433,31 @@ class MultiBrowserApp {
         }
     }
 
+    // Bring the window to the front. Order matters and every step runs
+    // unconditionally: an already-visible-but-occluded window still needs
+    // show()/moveTop() — focus() alone is ignored by most Linux WMs.
+    raiseMainWindow() {
+        if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
+        if (this.mainWindow.isMinimized()) {
+            this.mainWindow.restore();
+            console.log('🔄 Window restored from minimized state');
+        }
+
+        this.mainWindow.setAlwaysOnTop(true);
+        this.mainWindow.show();   // re-maps + raises even when already visible
+        this.mainWindow.focus();
+        try { this.mainWindow.moveTop(); } catch { /* not supported on some WMs */ }
+        console.log('🎯 Window shown, focused and raised');
+
+        // Remove always on top shortly after so it doesn't stay pinned.
+        setTimeout(() => {
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.setAlwaysOnTop(false);
+                console.log('🎯 Always on top removed');
+            }
+        }, 500);
+    }
+
     // Handle notification click events
     handleNotificationClick(sessionId) {
         console.log(`🎯 ========== NOTIFICATION CLICK HANDLER ==========`);
@@ -443,27 +476,7 @@ class MultiBrowserApp {
             console.log(`   - Visible: ${this.mainWindow.isVisible()}`);
             console.log(`   - Focused: ${this.mainWindow.isFocused()}`);
 
-            // Bring window to front and focus it. Order matters and every step
-            // runs unconditionally: an already-visible-but-occluded window still
-            // needs show()/moveTop() — focus() alone is ignored by most Linux WMs.
-            if (this.mainWindow.isMinimized()) {
-                this.mainWindow.restore();
-                console.log('🔄 Window restored from minimized state');
-            }
-
-            this.mainWindow.setAlwaysOnTop(true);
-            this.mainWindow.show();   // re-maps + raises even when already visible
-            this.mainWindow.focus();
-            try { this.mainWindow.moveTop(); } catch { /* not supported on some WMs */ }
-            console.log('🎯 Window shown, focused and raised');
-
-            // Remove always on top shortly after so it doesn't stay pinned.
-            setTimeout(() => {
-                if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-                    this.mainWindow.setAlwaysOnTop(false);
-                    console.log('🎯 Always on top removed');
-                }
-            }, 500);
+            this.raiseMainWindow();
 
             console.log('🎯 Window focused and brought to front');
 
@@ -489,12 +502,11 @@ class MultiBrowserApp {
         console.log(`📲 WhatsApp link: ${rawUrl} → ${targetUrl || 'not parseable'}`);
         if (!targetUrl) return false;
 
-        const sessionId = await this.findWhatsAppSessionId();
-        if (!sessionId) {
+        const candidates = await this.getWhatsAppSessionCandidates();
+        if (candidates.length === 0) {
             console.warn('📲 No WhatsApp session found to receive the link');
             if (this.mainWindow) {
-                this.mainWindow.show();
-                this.mainWindow.focus();
+                this.raiseMainWindow();
                 this.mainWindow.webContents.send('app-message', {
                     text: 'WhatsApp link received, but no WhatsApp session exists. Create one pointing to web.whatsapp.com.',
                     type: 'error'
@@ -503,9 +515,22 @@ class MultiBrowserApp {
             return false;
         }
 
+        let sessionId = candidates[0].id;
+        if (candidates.length > 1) {
+            sessionId = await this.askWhichWhatsAppSession(candidates, targetUrl);
+            if (!sessionId) {
+                console.log('📲 WhatsApp link cancelled by the user');
+                return false;
+            }
+        }
+
         const view = this.browserViews.get(sessionId);
         if (view) {
-            view.webContents.loadURL(targetUrl);
+            // Switch to the tab first so the chat opens in front of the user.
+            this.handleNotificationClick(sessionId);
+            const opened = await this.openWhatsAppChatInPlace(view, targetUrl);
+            if (!opened) view.webContents.loadURL(targetUrl);
+            return true;
         } else {
             // Tab not open yet: remember the URL; createBrowserView will load
             // it instead of the session's start URL when the tab opens below.
@@ -517,30 +542,89 @@ class MultiBrowserApp {
         return true;
     }
 
-    // Pick the session that should receive WhatsApp links: the active view if
-    // it's on WhatsApp Web, then any open WhatsApp view, then the most
-    // recently used saved session whose URL points at WhatsApp.
-    async findWhatsAppSessionId() {
-        const isWhatsAppView = (view) => {
-            try {
-                return view.webContents.getURL().includes('web.whatsapp.com');
-            } catch {
-                return false;
-            }
-        };
-
-        if (this.activeBrowserView && isWhatsAppView(this.activeBrowserView)) {
-            return this.getSessionIdByWebContents(this.activeBrowserView.webContents);
+    // Open the chat inside the already-loaded WhatsApp Web instead of
+    // reloading it (see whatsapp-open-chat.js). Returns false when the page
+    // isn't ready or WhatsApp's internals changed; the caller then reloads.
+    async openWhatsAppChatInPlace(view, targetUrl) {
+        const contents = view.webContents;
+        if (contents.isLoading() || !contents.getURL().startsWith('https://web.whatsapp.com/')) {
+            return false;
         }
 
+        const url = new URL(targetUrl);
+        const phone = url.searchParams.get('phone');
+        const text = url.searchParams.get('text') || '';
+
+        const timeout = new Promise(resolve =>
+            setTimeout(() => resolve({ ok: false, reason: 'timed out' }), 10000));
+        try {
+            const result = await Promise.race([
+                contents.executeJavaScript(buildOpenChatScript(phone, text), true),
+                timeout
+            ]);
+            console.log('📲 Open chat in place:', JSON.stringify(result));
+            return !!(result && result.ok);
+        } catch (error) {
+            console.warn('📲 Open chat in place failed:', error.message);
+            return false;
+        }
+    }
+
+    // Every session that can receive a WhatsApp link: saved sessions whose URL
+    // points at WhatsApp, plus open tabs currently on web.whatsapp.com. Sorted
+    // so the most likely target comes first: the active tab, then open tabs,
+    // then the most recently used.
+    async getWhatsAppSessionCandidates() {
+        const openOnWhatsApp = new Set();
         for (const [sessionId, view] of this.browserViews) {
-            if (isWhatsAppView(view)) return sessionId;
+            try {
+                if (view.webContents.getURL().includes('web.whatsapp.com')) openOnWhatsApp.add(sessionId);
+            } catch { /* view being destroyed */ }
+        }
+
+        let activeId = null;
+        if (this.activeBrowserView) {
+            const id = this.getSessionIdByWebContents(this.activeBrowserView.webContents);
+            if (openOnWhatsApp.has(id)) activeId = id;
         }
 
         const sessions = await this.getSessions();
-        sessions.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
-        const match = sessions.find(s => (s.url || '').includes('whatsapp.com'));
-        return match ? match.id : null;
+        const rank = (s) => (s.id === activeId ? 0 : openOnWhatsApp.has(s.id) ? 1 : 2);
+        return sessions
+            .filter(s => (s.url || '').includes('whatsapp.com') || openOnWhatsApp.has(s.id))
+            .sort((a, b) => rank(a) - rank(b) || new Date(b.lastAccessed || 0) - new Date(a.lastAccessed || 0))
+            .map(s => ({ id: s.id, name: s.name, open: openOnWhatsApp.has(s.id) }));
+    }
+
+    // Two or more WhatsApp sessions: let the user pick which one opens the
+    // link. The shell renderer shows the chooser and answers over
+    // 'whatsapp-session-chosen'. Resolves to a session id, or null when the
+    // user cancels, ignores it for two minutes, or a newer link replaces it.
+    askWhichWhatsAppSession(candidates, targetUrl) {
+        if (!this.mainWindow || this.mainWindow.isDestroyed()) return Promise.resolve(candidates[0].id);
+
+        // A newer link replaces a chooser that is still open.
+        if (this.pendingWhatsAppChoice) this.pendingWhatsAppChoice.resolve(null);
+
+        const url = new URL(targetUrl);
+        const requestId = `wa-${Date.now()}`;
+        this.raiseMainWindow();
+
+        return new Promise(resolve => {
+            const timer = setTimeout(() => finish(null), 120000);
+            const finish = (sessionId) => {
+                clearTimeout(timer);
+                if (this.pendingWhatsAppChoice?.requestId === requestId) this.pendingWhatsAppChoice = null;
+                resolve(candidates.some(c => c.id === sessionId) ? sessionId : null);
+            };
+            this.pendingWhatsAppChoice = { requestId, resolve: finish };
+            this.mainWindow.webContents.send('choose-whatsapp-session', {
+                requestId,
+                phone: url.searchParams.get('phone'),
+                text: url.searchParams.get('text') || '',
+                sessions: candidates
+            });
+        });
     }
 
     createMainWindow() {
