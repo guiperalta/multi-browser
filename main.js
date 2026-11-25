@@ -770,8 +770,8 @@ class MultiBrowserApp {
             return this.saveAISettings(settings);
         });
 
-        ipcMain.handle('ai-request', async (event, { action, text }) => {
-            return this.handleAIRequest(action, text);
+        ipcMain.handle('ai-request', async (event, { action, text, options }) => {
+            return this.handleAIRequest(action, text, options);
         });
 
         // Floating AI button position (shared by every session view)
@@ -1590,12 +1590,18 @@ class MultiBrowserApp {
         }
     }
 
-    async handleAIRequest(action, text) {
+    async handleAIRequest(action, text, options = {}) {
         try {
             const settings = await this.getAISettings();
             const provider = createProvider(settings);
+            // The overlay asks for a language per request (translate/generate);
+            // fall back to the configured default when it doesn't.
+            const requested = typeof options?.targetLanguage === 'string'
+                ? options.targetLanguage.trim().slice(0, 60)
+                : '';
             const result = await provider.sendRequest(action, text, {
-                targetLanguage: settings.targetLanguage || 'English'
+                targetLanguage: requested || settings.targetLanguage || 'English',
+                tone: typeof options?.tone === 'string' ? options.tone : undefined
             });
             return { success: true, text: result };
         } catch (error) {

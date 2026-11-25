@@ -6,16 +6,32 @@ const SYSTEM_PROMPTS = {
     review: 'You are a writing assistant. Review the following message for grammar, spelling, and clarity errors. Return the corrected version first, then on a new line starting with "Changes:" briefly note what was changed. If the message is already correct, return it as-is and say "No changes needed."',
     translate: 'You are a translator. Translate the following text to {targetLanguage}. Return only the translation, nothing else.',
     reply: 'You are a messaging assistant. Based on the following message, suggest a natural, friendly reply. Keep it concise and conversational. Return only the suggested reply.',
-    summarize: 'You are a summarization assistant. Summarize the following messages or conversation concisely, highlighting key points. Use bullet points if there are multiple topics.'
+    summarize: 'You are a summarization assistant. Summarize the following messages or conversation concisely, highlighting key points. Use bullet points if there are multiple topics.',
+    generate: 'You are a messaging assistant. Write the message the user describes in the instructions below, ready to send as-is in a chat. Write it in {targetLanguage}, whatever language the instructions are in. Tone: {tone}. Keep it natural, the way a person would actually write it. Return only the message itself: no quotes, no preamble, no explanation.'
+};
+
+// Tone options offered by the Generate form (keys sent by the overlay).
+const TONE_PROMPTS = {
+    casual: 'casual and relaxed, like texting a friend or close colleague; contractions and light informality are fine',
+    neutral: 'friendly and polite, neither stiff nor too informal',
+    formal: 'formal and respectful, as in a professional message to a client or superior; no slang'
+};
+
+// How each action labels its input when the prompt is sent as one block.
+const INPUT_LABELS = {
+    generate: 'Instructions'
 };
 
 function buildPrompt(action, text, options = {}) {
     let systemPrompt = SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.review;
-    if (action === 'translate') {
+    if (systemPrompt.includes('{targetLanguage}')) {
         const lang = options.targetLanguage || 'English';
         systemPrompt = systemPrompt.replace('{targetLanguage}', lang);
     }
-    return { systemPrompt, userMessage: text };
+    if (systemPrompt.includes('{tone}')) {
+        systemPrompt = systemPrompt.replace('{tone}', TONE_PROMPTS[options.tone] || TONE_PROMPTS.neutral);
+    }
+    return { systemPrompt, userMessage: text, inputLabel: INPUT_LABELS[action] || 'Text' };
 }
 
 // Claude CLI Provider - uses locally installed claude CLI, no API key needed
@@ -25,8 +41,8 @@ class ClaudeCLIProvider {
     }
 
     async sendRequest(action, text, options = {}) {
-        const { systemPrompt, userMessage } = buildPrompt(action, text, options);
-        const fullPrompt = `${systemPrompt}\n\nText:\n${userMessage}`;
+        const { systemPrompt, userMessage, inputLabel } = buildPrompt(action, text, options);
+        const fullPrompt = `${systemPrompt}\n\n${inputLabel}:\n${userMessage}`;
 
         return new Promise((resolve, reject) => {
             const args = ['--print', '-p', fullPrompt];
@@ -193,4 +209,4 @@ function createProvider(settings = {}) {
     }
 }
 
-module.exports = { createProvider, ClaudeCLIProvider, ClaudeAPIProvider, OpenAIAPIProvider, OpenRouterProvider };
+module.exports = { createProvider, buildPrompt, ClaudeCLIProvider, ClaudeAPIProvider, OpenAIAPIProvider, OpenRouterProvider };

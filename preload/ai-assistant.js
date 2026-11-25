@@ -17,6 +17,12 @@ const { ipcRenderer } = require('electron');
     let resultCard = null;
     let initialized = false;
     let currentActionText = null; // clean text for Copy/Use (no changes explanation)
+    let defaultTranslateLanguage = 'English'; // from AI Settings
+    // Open Generate/Translate form: { action, text, prompt, language }. Kept
+    // after the request so "Edit" can bring the form back as it was.
+    let formState = null;
+    const lastLanguage = { generate: 'Brazilian Portuguese', translate: null };
+    let lastTone = 'neutral';
 
     // Position of the floating button: which edge it clings to, and where along
     // that edge (0 = top of the usable track, 1 = bottom). Ratios survive window
@@ -302,6 +308,7 @@ const { ipcRenderer } = require('electron');
         #ai-assistant-menu.visible .ai-menu-item:nth-child(3) { animation-delay: 0.05s; }
         #ai-assistant-menu.visible .ai-menu-item:nth-child(4) { animation-delay: 0.08s; }
         #ai-assistant-menu.visible .ai-menu-item:nth-child(5) { animation-delay: 0.11s; }
+        #ai-assistant-menu.visible .ai-menu-item:nth-child(6) { animation-delay: 0.14s; }
 
         @keyframes ai-item-in {
             from { opacity: 0; transform: translateY(6px); }
@@ -488,13 +495,13 @@ const { ipcRenderer } = require('electron');
 
         .ai-result-btn:active { transform: translateY(1px); }
 
-        .ai-btn-copy {
+        .ai-btn-copy, .ai-btn-back, .ai-btn-cancel {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--mb-hairline);
             color: var(--mb-ink-dim);
         }
 
-        .ai-btn-copy:hover { background: rgba(255, 255, 255, 0.09); color: var(--mb-ink); }
+        .ai-btn-copy:hover, .ai-btn-back:hover, .ai-btn-cancel:hover { background: rgba(255, 255, 255, 0.09); color: var(--mb-ink); }
 
         .ai-btn-use {
             background: linear-gradient(180deg, #eeb35c 0%, #d9963c 100%);
@@ -503,6 +510,139 @@ const { ipcRenderer } = require('electron');
         }
 
         .ai-btn-use:hover { filter: brightness(1.07); }
+
+        .ai-btn-back { flex: 0 0 auto; }
+
+        /* ── Generate / Translate form ── */
+        #ai-result-card { color-scheme: dark; }
+
+        .ai-form {
+            display: flex;
+            flex-direction: column;
+            gap: 11px;
+            white-space: normal;
+        }
+
+        .ai-form-label {
+            font-family: var(--mb-mono);
+            font-size: 9.5px;
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--mb-ink-faint);
+            margin-bottom: -4px;
+        }
+
+        .ai-form-source {
+            padding: 9px 11px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--mb-hairline-soft);
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: var(--mb-ink-dim);
+            white-space: pre-wrap;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .ai-form-prompt {
+            width: 100%;
+            min-height: 86px;
+            max-height: 30vh;
+            resize: vertical;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.26);
+            border: 1px solid var(--mb-hairline);
+            color: var(--mb-ink);
+            font-size: 13.5px;
+            line-height: 1.5;
+            outline: none;
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .ai-form-prompt::placeholder { color: var(--mb-ink-faint); }
+
+        .ai-form-prompt:focus {
+            border-color: rgba(226, 164, 75, 0.5);
+            box-shadow: 0 0 0 3px var(--mb-accent-soft);
+        }
+
+        .ai-form-prompt.ai-invalid {
+            border-color: var(--mb-danger);
+            box-shadow: 0 0 0 3px rgba(226, 112, 95, 0.16);
+        }
+
+        .ai-lang-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .ai-lang-chip { flex: none; }
+
+        /* Tone: three equal segments across the row */
+        .ai-tone-row .ai-lang-chip { flex: 1 1 0; }
+
+        .ai-lang-chip, .ai-lang-select {
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 999px;
+            border: 1px solid var(--mb-hairline);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--mb-ink-dim);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+        }
+
+        .ai-lang-chip:hover, .ai-lang-select:hover { color: var(--mb-ink); background: rgba(255, 255, 255, 0.07); }
+
+        .ai-lang-chip:focus-visible, .ai-lang-select:focus-visible {
+            box-shadow: 0 0 0 3px var(--mb-accent-soft);
+        }
+
+        .ai-lang-select {
+            appearance: none;
+            -webkit-appearance: none;
+            flex: 1 1 0;
+            min-width: 0;
+            text-overflow: ellipsis;
+            padding-right: 28px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ece7de' stroke-opacity='.5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 11px;
+        }
+
+        .ai-lang-select option { background: var(--mb-panel-solid); color: var(--mb-ink); }
+
+        .ai-lang-chip[aria-pressed="true"], .ai-lang-select.active {
+            background-color: var(--mb-accent-soft);
+            border-color: rgba(226, 164, 75, 0.45);
+            color: var(--mb-accent);
+        }
+
+        .ai-form-actions {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 3px;
+        }
+
+        .ai-form-hint {
+            flex: 1;
+            font-family: var(--mb-mono);
+            font-size: 9.5px;
+            letter-spacing: 0.08em;
+            color: var(--mb-ink-faint);
+        }
+
+        .ai-form-actions .ai-result-btn { flex: 0 0 auto; }
 
         /* Loading state */
         .ai-loading {
@@ -553,6 +693,7 @@ const { ipcRenderer } = require('electron');
         spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.4L19.5 10l-5.6 1.6L12 17l-1.9-5.4L4.5 10l5.6-1.6L12 3z"/><path d="M18.5 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z"/></svg>',
         pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z"/><path d="M14.5 6.5l3 3"/></svg>',
         globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.2 2.4 3.3 5.3 3.3 8.5S14.2 18.1 12 20.5c-2.2-2.4-3.3-5.3-3.3-8.5S9.8 5.9 12 3.5z"/></svg>',
+        wand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 19.5L15 9"/><path d="M13 7l4 4"/><path d="M18 3.5v3M16.5 5h3"/><path d="M20 10.5v2M19 11.5h2"/><path d="M9.5 3.5v2M8.5 4.5h2"/></svg>',
         reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8L4.5 12 9 16"/><path d="M4.5 12h9a6 6 0 016 6v1.5"/></svg>',
         lines: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M4.5 12h11"/><path d="M4.5 17h7"/></svg>',
         target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/></svg>',
@@ -700,6 +841,11 @@ const { ipcRenderer } = require('electron');
         toolbar.innerHTML = `
             <div id="ai-assistant-menu" role="menu" aria-label="AI Assistant">
                 <div class="ai-menu-header"><span class="ai-dot"></span>Assistant<span class="ai-rule"></span></div>
+                <button class="ai-menu-item" role="menuitem" data-action="generate">
+                    <span class="ai-icon">${ICONS.wand}</span>
+                    <span class="ai-label">Generate</span>
+                    <span class="ai-menu-shortcut">Compose</span>
+                </button>
                 <button class="ai-menu-item" role="menuitem" data-action="review">
                     <span class="ai-icon">${ICONS.pen}</span>
                     <span class="ai-label">Review</span>
@@ -738,6 +884,7 @@ const { ipcRenderer } = require('electron');
             </div>
             <div class="ai-result-body"></div>
             <div class="ai-result-actions">
+                <button class="ai-result-btn ai-btn-back">Edit</button>
                 <button class="ai-result-btn ai-btn-copy">Copy</button>
                 <button class="ai-result-btn ai-btn-use">Use</button>
             </div>
@@ -787,17 +934,31 @@ const { ipcRenderer } = require('electron');
         setupCardDrag();
 
         // Copy button
-        resultCard.querySelector('.ai-btn-copy').addEventListener('click', () => {
+        resultCard.querySelector('.ai-result-actions .ai-btn-copy').addEventListener('click', () => {
             const text = currentActionText || resultCard.querySelector('.ai-result-body').textContent;
             navigator.clipboard.writeText(text).then(() => {
-                const btn = resultCard.querySelector('.ai-btn-copy');
+                const btn = resultCard.querySelector('.ai-result-actions .ai-btn-copy');
                 btn.textContent = 'Copied';
                 setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
             });
         });
 
+        // Edit button - back to the Generate/Translate form, as it was
+        resultCard.querySelector('.ai-btn-back').addEventListener('click', () => {
+            if (formState) openForm(formState.action, formState.text, formState);
+        });
+
+        // Keys typed into the card (prompt box, language picker) belong to the
+        // card: keep them from reaching the site's own shortcut handlers.
+        // Our Escape / Alt+H handler runs in the capture phase, before this.
+        ['keydown', 'keyup', 'keypress', 'paste'].forEach(type => {
+            resultCard.addEventListener(type, (e) => {
+                if (e.key !== 'Escape') e.stopPropagation(); // paste: e.key is undefined
+            });
+        });
+
         // Use button - paste into WhatsApp input
-        resultCard.querySelector('.ai-btn-use').addEventListener('click', () => {
+        resultCard.querySelector('.ai-result-actions .ai-btn-use').addEventListener('click', () => {
             const text = currentActionText || resultCard.querySelector('.ai-result-body').textContent;
             pasteIntoInput(text);
             hideResultCard();
@@ -940,32 +1101,280 @@ const { ipcRenderer } = require('electron');
         header.addEventListener('pointercancel', end);
     }
 
-    function showResultCard(title, content, isLoading = false) {
-        const titleEl = resultCard.querySelector('.ai-result-title');
-        const bodyEl = resultCard.querySelector('.ai-result-body');
+    // Show/hide the footer buttons. `back` is the "Edit" button that returns
+    // to the Generate/Translate form.
+    function setResultActions({ copy = false, use = false, back = false } = {}) {
+        // Scoped to the footer: the form's own submit button shares .ai-btn-use.
         const actionsEl = resultCard.querySelector('.ai-result-actions');
+        actionsEl.querySelector('.ai-btn-copy').style.display = copy ? '' : 'none';
+        actionsEl.querySelector('.ai-btn-use').style.display = use ? '' : 'none';
+        actionsEl.querySelector('.ai-btn-back').style.display = back ? '' : 'none';
+        actionsEl.style.display = (copy || use || back) ? 'flex' : 'none';
+    }
 
-        titleEl.textContent = title;
-
-        if (isLoading) {
-            bodyEl.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div><span>Thinking</span></div>';
-            actionsEl.style.display = 'none';
-        } else {
-            bodyEl.textContent = content;
-            actionsEl.style.display = 'flex';
-        }
-
+    function revealResultCard() {
         const wasVisible = resultCard.classList.contains('visible');
         resultCard.classList.add('visible');
         if (!wasVisible || !cardMoved) positionResultCard();
     }
 
-    function showResultError(message) {
+    function showResultCard(title, content, isLoading = false, { back = false } = {}) {
+        const titleEl = resultCard.querySelector('.ai-result-title');
         const bodyEl = resultCard.querySelector('.ai-result-body');
-        const actionsEl = resultCard.querySelector('.ai-result-actions');
+
+        titleEl.textContent = title;
+
+        if (isLoading) {
+            bodyEl.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div><span>Thinking</span></div>';
+            setResultActions();
+        } else {
+            bodyEl.textContent = content;
+            setResultActions({ copy: true, use: true, back });
+        }
+
+        revealResultCard();
+    }
+
+    function showResultError(message, { back = false } = {}) {
+        const bodyEl = resultCard.querySelector('.ai-result-body');
         bodyEl.innerHTML = `<div class="ai-error">${ICONS.alert}<span>${escapeHtml(message)}</span></div>`;
-        actionsEl.style.display = 'none';
+        setResultActions({ back });
         if (!cardMoved) positionResultCard();
+    }
+
+    // ── Language picker (Generate / Translate) ──
+    // `value` is what the model is told; `label` is what the chip shows.
+    const MAIN_LANGUAGES = [
+        { value: 'Brazilian Portuguese', label: 'Português (BR)', short: 'PT-BR' },
+        { value: 'English', label: 'English', short: 'EN' }
+    ];
+    const OTHER_LANGUAGES = [
+        'Spanish', 'French', 'German', 'Italian', 'European Portuguese', 'Dutch',
+        'Russian', 'Polish', 'Turkish', 'Arabic', 'Hebrew', 'Hindi',
+        'Chinese (Simplified)', 'Japanese', 'Korean'
+    ];
+
+    // Map a free-text language (e.g. the AI Settings default "pt-BR") onto a
+    // known entry; unknown names are kept as typed.
+    function normalizeLanguage(lang) {
+        const raw = String(lang || '').trim();
+        if (!raw) return 'English';
+        const key = raw.toLowerCase();
+        const aliases = {
+            'pt': 'Brazilian Portuguese', 'pt-br': 'Brazilian Portuguese', 'pt_br': 'Brazilian Portuguese',
+            'portuguese': 'Brazilian Portuguese', 'português': 'Brazilian Portuguese', 'portugues': 'Brazilian Portuguese',
+            'brazilian portuguese': 'Brazilian Portuguese', 'portuguese (brazil)': 'Brazilian Portuguese',
+            'en': 'English', 'en-us': 'English', 'en-gb': 'English', 'inglês': 'English', 'ingles': 'English'
+        };
+        if (aliases[key]) return aliases[key];
+        const known = MAIN_LANGUAGES.find(l => l.value.toLowerCase() === key || l.label.toLowerCase() === key)
+            || OTHER_LANGUAGES.find(l => l.toLowerCase() === key);
+        return known ? (known.value || known) : raw;
+    }
+
+    function languageShortLabel(lang) {
+        const main = MAIN_LANGUAGES.find(l => l.value === lang);
+        return main ? main.short : lang;
+    }
+
+    function defaultLanguageFor(action) {
+        if (lastLanguage[action]) return lastLanguage[action];
+        return action === 'translate' ? normalizeLanguage(defaultTranslateLanguage) : 'Brazilian Portuguese';
+    }
+
+    function languagePickerHtml(selected) {
+        const isMain = MAIN_LANGUAGES.some(l => l.value === selected);
+        const others = OTHER_LANGUAGES.includes(selected) || isMain
+            ? OTHER_LANGUAGES
+            : [selected, ...OTHER_LANGUAGES]; // custom default from AI Settings
+        const chips = MAIN_LANGUAGES.map(l =>
+            `<button type="button" class="ai-lang-chip" data-lang="${escapeHtml(l.value)}" aria-pressed="${l.value === selected}">${escapeHtml(l.label)}</button>`
+        ).join('');
+        const options = others.map(l =>
+            `<option value="${escapeHtml(l)}"${l === selected ? ' selected' : ''}>${escapeHtml(l)}</option>`
+        ).join('');
+        return `
+            <div class="ai-lang-row" role="group" aria-label="Language">
+                ${chips}
+                <select class="ai-lang-select${isMain ? '' : ' active'}" aria-label="Other language">
+                    <option value=""${isMain ? ' selected' : ''}>Other…</option>
+                    ${options}
+                </select>
+            </div>`;
+    }
+
+    // ── Tone picker (Generate) ──
+    // Values must match TONE_PROMPTS in ai-provider.js.
+    const TONES = [
+        { value: 'casual', label: 'Casual' },
+        { value: 'neutral', label: 'Neutral' },
+        { value: 'formal', label: 'Formal' }
+    ];
+
+    function tonePickerHtml(selected) {
+        const chips = TONES.map(t =>
+            `<button type="button" class="ai-lang-chip" data-tone="${t.value}" aria-pressed="${t.value === selected}">${t.label}</button>`
+        ).join('');
+        return `<div class="ai-lang-row ai-tone-row" role="group" aria-label="Tone">${chips}</div>`;
+    }
+
+    // ── Generate / Translate form ──
+    // Generate: prompt box + language. Translate: preview of the captured
+    // text + target language. Submitting runs the request in the same card.
+    function openForm(action, text, preset = {}) {
+        const isGenerate = action === 'generate';
+        formState = {
+            tone: preset.tone || lastTone,
+            action,
+            text: text || '',
+            prompt: preset.prompt || '',
+            language: preset.language || defaultLanguageFor(action)
+        };
+        currentActionText = null;
+
+        resultCard.querySelector('.ai-result-title').textContent = isGenerate ? 'Generate' : 'Translate';
+        const bodyEl = resultCard.querySelector('.ai-result-body');
+        const verb = isGenerate ? 'Generate' : 'Translate';
+        bodyEl.innerHTML = `
+            <form class="ai-form" novalidate>
+                ${isGenerate ? `
+                    <label class="ai-form-label" for="ai-form-prompt">What should the message say?</label>
+                    <textarea class="ai-form-prompt" id="ai-form-prompt" rows="3"
+                        placeholder="Say hello to Paula and ask if we have any updates on that issue yet"></textarea>
+                ` : `
+                    <span class="ai-form-label">Text</span>
+                    <div class="ai-form-source">${escapeHtml(formState.text)}</div>
+                `}
+                <span class="ai-form-label">${isGenerate ? 'Write it in' : 'Translate to'}</span>
+                ${languagePickerHtml(formState.language)}
+                ${isGenerate ? `
+                    <span class="ai-form-label">Tone</span>
+                    ${tonePickerHtml(formState.tone)}
+                ` : ''}
+                <div class="ai-form-actions">
+                    <span class="ai-form-hint">${isGenerate ? 'Enter ↵ · Shift+Enter new line' : 'Enter ↵'}</span>
+                    <button type="button" class="ai-result-btn ai-btn-cancel">Cancel</button>
+                    <button type="submit" class="ai-result-btn ai-btn-use ai-btn-submit">${verb}</button>
+                </div>
+            </form>`.trim(); // the body is pre-wrap: stray whitespace would render
+        setResultActions();
+
+        const form = bodyEl.querySelector('.ai-form');
+        const prompt = form.querySelector('.ai-form-prompt');
+        const select = form.querySelector('.ai-lang-select');
+        const chips = form.querySelectorAll('.ai-lang-chip[data-lang]');
+        const toneChips = form.querySelectorAll('.ai-lang-chip[data-tone]');
+
+        const pick = (lang) => {
+            formState.language = lang;
+            chips.forEach(c => c.setAttribute('aria-pressed', String(c.dataset.lang === lang)));
+            const isMain = MAIN_LANGUAGES.some(l => l.value === lang);
+            select.classList.toggle('active', !isMain);
+            if (isMain) select.value = '';
+        };
+
+        // After a pick, hand focus back so Enter submits: to the prompt for
+        // Generate, to the submit button for Translate.
+        const refocus = () => (prompt || form.querySelector('.ai-btn-submit')).focus({ preventScroll: true });
+        chips.forEach(chip => chip.addEventListener('click', () => {
+            pick(chip.dataset.lang);
+            refocus();
+        }));
+        select.addEventListener('change', () => {
+            pick(select.value || MAIN_LANGUAGES[0].value);
+            refocus();
+        });
+        toneChips.forEach(chip => chip.addEventListener('click', () => {
+            formState.tone = chip.dataset.tone;
+            toneChips.forEach(c => c.setAttribute('aria-pressed', String(c === chip)));
+            refocus();
+        }));
+
+        if (prompt) {
+            prompt.value = formState.prompt;
+            prompt.addEventListener('input', () => {
+                formState.prompt = prompt.value;
+                prompt.classList.remove('ai-invalid');
+            });
+            prompt.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                    e.preventDefault();
+                    form.requestSubmit();
+                }
+            });
+        } else {
+            form.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+                    e.preventDefault();
+                    form.requestSubmit();
+                }
+            });
+        }
+
+        form.querySelector('.ai-btn-cancel').addEventListener('click', hideResultCard);
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            submitForm();
+        });
+
+        revealResultCard();
+        // Focus after reveal: a hidden element cannot take focus.
+        (prompt || form.querySelector('.ai-btn-submit')).focus({ preventScroll: true });
+        if (prompt) prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+    }
+
+    function submitForm() {
+        if (!formState) return;
+        const { action, language } = formState;
+        let input = formState.text;
+
+        if (action === 'generate') {
+            input = (formState.prompt || '').trim();
+            if (!input) {
+                const prompt = resultCard.querySelector('.ai-form-prompt');
+                if (prompt) {
+                    prompt.classList.add('ai-invalid');
+                    prompt.focus();
+                }
+                return;
+            }
+        }
+
+        lastLanguage[action] = language;
+        if (action === 'generate') {
+            lastTone = formState.tone;
+            const tone = TONES.find(t => t.value === formState.tone) || TONES[1];
+            const title = `Generate · ${languageShortLabel(language)} · ${tone.label}`;
+            runRequest(action, input, title, { targetLanguage: language, tone: tone.value }, { back: true });
+            return;
+        }
+        runRequest(action, input, `Translate · ${languageShortLabel(language)}`, { targetLanguage: language }, { back: true });
+    }
+
+    // Send one request and render the outcome in the card.
+    async function runRequest(action, text, title, options = {}, { back = false } = {}) {
+        showResultCard(title, '', true);
+
+        try {
+            const result = await ipcRenderer.invoke('ai-request', { action, text, options });
+
+            if (result.success) {
+                if (action === 'review') {
+                    // Extract only the reviewed text (before "Changes:" line) for Copy/Use
+                    const changesMatch = result.text.match(/^([\s\S]*?)(\n+changes:[\s\S]*)$/i);
+                    currentActionText = changesMatch ? changesMatch[1].trim() : result.text;
+                } else {
+                    currentActionText = result.text;
+                }
+                showResultCard(title, result.text, false, { back });
+            } else {
+                currentActionText = null;
+                showResultError(result.error || 'An unknown error occurred.', { back });
+            }
+        } catch (err) {
+            currentActionText = null;
+            showResultError(`Request failed: ${err.message}`, { back });
+        }
     }
 
     function hideResultCard() {
@@ -1011,6 +1420,14 @@ const { ipcRenderer } = require('electron');
     async function handleAction(action) {
         hideMenu();
 
+        // Generate starts from a prompt, not from text on the page.
+        if (action === 'generate') {
+            openForm('generate', '', formState && formState.action === 'generate'
+                ? { language: formState.language, tone: formState.tone }
+                : {});
+            return;
+        }
+
         const text = getSelectedOrInputText();
         if (!text) {
             showResultCard('No Text', '');
@@ -1018,35 +1435,20 @@ const { ipcRenderer } = require('electron');
             return;
         }
 
+        // Translate asks for the target language first. The text is captured
+        // now, before clicks in the form can clear the page selection.
+        if (action === 'translate') {
+            openForm('translate', text);
+            return;
+        }
+
         const actionLabels = {
             review: 'Review',
-            translate: 'Translate',
             reply: 'Reply Suggestion',
             summarize: 'Summary'
         };
 
-        showResultCard(actionLabels[action] || 'AI Result', '', true);
-
-        try {
-            const result = await ipcRenderer.invoke('ai-request', { action, text });
-
-            if (result.success) {
-                if (action === 'review') {
-                    // Extract only the reviewed text (before "Changes:" line) for Copy/Use
-                    const changesMatch = result.text.match(/^([\s\S]*?)(\n+changes:[\s\S]*)$/i);
-                    currentActionText = changesMatch ? changesMatch[1].trim() : result.text;
-                } else {
-                    currentActionText = result.text;
-                }
-                showResultCard(actionLabels[action] || 'AI Result', result.text);
-            } else {
-                currentActionText = null;
-                showResultError(result.error || 'An unknown error occurred.');
-            }
-        } catch (err) {
-            currentActionText = null;
-            showResultError(`Request failed: ${err.message}`);
-        }
+        runRequest(action, text, actionLabels[action] || 'AI Result');
     }
 
     // ── Keyboard shortcut (DOM-level, secondary mechanism) ──
@@ -1073,6 +1475,9 @@ const { ipcRenderer } = require('electron');
     async function loadSettings() {
         try {
             const settings = await ipcRenderer.invoke('ai-get-settings');
+            if (settings && settings.targetLanguage) {
+                defaultTranslateLanguage = settings.targetLanguage;
+            }
             if (settings && settings.shortcut) {
                 const parts = settings.shortcut.split('+');
                 shortcutKey = parts[parts.length - 1] || 'h';

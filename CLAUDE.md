@@ -1,6 +1,6 @@
 # Multi Browser
 
-Electron desktop app for running **multiple fully-isolated browser sessions** side by side in a tabbed UI. Each session has its own cookies, localStorage, and storage partition, so you can be logged into several accounts of the same site (e.g. multiple WhatsApp Web / social accounts) at once. Ships with an AI assistant overlay (review/translate/reply/summarize) backed by the Claude CLI or an LLM API.
+Electron desktop app for running **multiple fully-isolated browser sessions** side by side in a tabbed UI. Each session has its own cookies, localStorage, and storage partition, so you can be logged into several accounts of the same site (e.g. multiple WhatsApp Web / social accounts) at once. Ships with an AI assistant overlay (generate/review/translate/reply/summarize) backed by the Claude CLI or an LLM API.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Standard Electron split — one main process, one renderer for the app shell (ta
 | `preload/index.js` | Single preload for every session view (Electron allows one preload per view). Requires `notifications.js` then `ai-assistant.js`. |
 | `preload/notifications.js` | Notification interception (see below). |
 | `preload/ai-assistant.js` | In-page AI assistant overlay injected into each session. |
-| `ai-provider.js` | AI provider factory: `claude-cli` (local `claude` CLI, no key), `claude-api`, `openai-api`, `openrouter-api`. Actions: review, translate, reply, summarize. |
+| `ai-provider.js` | AI provider factory: `claude-cli` (local `claude` CLI, no key), `claude-api`, `openai-api`, `openrouter-api`. Actions: generate, review, translate, reply, summarize. `generate` and `translate` take a per-request `targetLanguage` (overlay language picker); main falls back to `/ai-settings/targetLanguage`. |
 | `updater.js` | In-app updates from GitHub Releases: check, download (sha256-verified), install per package format. See below. |
 | `sessions.json` | Persisted state (via `node-json-db`) in `app.getPath('userData')`: `/sessions`, `/ai-settings`, `/ui-theme`, `/ai-fab-position`. |
 | `assets/`, `build/icons/` | App icons (png/ico/icns; `build/icons` is the electron-builder Linux icon set). |
